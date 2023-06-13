@@ -1,5 +1,7 @@
 use std::{collections::BTreeMap, hash::Hash, hash::Hasher, vec};
 
+use crate::error::{JsonError, Result};
+use serde::de::DeserializeOwned;
 use serde_json::{Number, Value};
 
 #[derive(Clone)]
@@ -10,6 +12,105 @@ enum Path {
 
 type Paths = Vec<Path>;
 
+trait Routable {
+    fn route_get(&self, paths: &Paths) -> Result<Option<Value>>;
+
+    fn route_get_mut<T>(&mut self, paths: &Paths) -> Result<&mut Value>;
+
+    fn route_insert<T>(&mut self, paths: &Paths, value: T) -> Result<()>;
+
+    fn route_delete<T>(&mut self, paths: &Paths, value: Value) -> Result<()>;
+
+    fn route_replace<T>(&mut self, paths: &Paths, value: Value) -> Result<()>;
+}
+
+impl Routable for serde_json::Value {
+    fn route_get(&self, paths: &Paths) -> Result<Option<Value>> {
+        match self {
+            Value::Array(array) => array.route_get(paths),
+            Value::Object(obj) => obj.route_get(paths),
+            Value::Null => Ok(None),
+            _ => {
+                if paths.is_empty() {
+                    Ok(Some(self.to_owned()))
+                } else {
+                    Err(JsonError::BadPath)
+                }
+            }
+        }
+    }
+
+    fn route_get_mut<T>(&mut self, paths: &Paths) -> Result<&mut Value> {
+        match self {
+            Value::Array(array) => array.route_get_mut(paths),
+            Value::Object(obj) => obj.route_get_mut(paths),
+            Value::Null => Ok(None),
+            _ => {
+                if paths.is_empty() {
+                    Ok(Some(self.to_owned()))
+                } else {
+                    Err(JsonError::BadPath)
+                }
+            }
+        }
+    }
+
+    fn route_insert<T>(&mut self, paths: &Paths, value: T) -> Result<()> {
+        todo!()
+    }
+
+    fn route_delete<T>(&mut self, paths: &Paths, value: Value) -> Result<()> {
+        todo!()
+    }
+
+    fn route_replace<T>(&mut self, paths: &Paths, value: Value) -> Result<()> {
+        todo!()
+    }
+}
+
+impl Routable for serde_json::Map<String, serde_json::Value> {
+    fn route_get<T>(&self, paths: &Paths) -> Result<Option<T>> {
+        todo!()
+    }
+
+    fn route_get_mut<T>(&mut self, paths: &Paths) -> Result<&mut Value> {
+        todo!()
+    }
+
+    fn route_insert<T>(&mut self, paths: &Paths, value: T) -> Result<()> {
+        todo!()
+    }
+
+    fn route_delete<T>(&mut self, paths: &Paths, value: Value) -> Result<()> {
+        todo!()
+    }
+
+    fn route_replace<T>(&mut self, paths: &Paths, value: Value) -> Result<()> {
+        todo!()
+    }
+}
+
+impl Routable for Vec<serde_json::Value> {
+    fn route_get<T>(&self, paths: &Paths) -> Result<Option<T>> {
+        todo!()
+    }
+
+    fn route_get_mut<T>(&mut self, paths: &Paths) -> Result<&mut Value> {
+        todo!()
+    }
+
+    fn route_insert<T>(&mut self, paths: &Paths, value: T) -> Result<()> {
+        todo!()
+    }
+
+    fn route_delete<T>(&mut self, paths: &Paths, value: Value) -> Result<()> {
+        todo!()
+    }
+
+    fn route_replace<T>(&mut self, paths: &Paths, value: Value) -> Result<()> {
+        todo!()
+    }
+}
 enum OperationComponent {
     AddNumber(Paths, Number),
     ListInsert(Paths, Value),
