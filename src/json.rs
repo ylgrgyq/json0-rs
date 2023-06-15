@@ -44,10 +44,9 @@ impl Routable for serde_json::Value {
         match self {
             Value::Array(array) => array.route_get_mut(paths),
             Value::Object(obj) => obj.route_get_mut(paths),
-            Value::Null => Ok(None),
             _ => {
                 if paths.is_empty() {
-                    Ok(Some(self.to_owned()))
+                    Ok(self)
                 } else {
                     Err(JsonError::BadPath)
                 }
@@ -56,11 +55,25 @@ impl Routable for serde_json::Value {
     }
 
     fn route_insert<T>(&mut self, paths: &Paths, value: T) -> Result<()> {
-        todo!()
+        match self {
+            Value::Array(array) => array.route_insert(paths, value),
+            Value::Object(obj) => obj.route_insert(paths, value),
+            _ => Err(JsonError::BadPath),
+        }
     }
 
     fn route_delete<T>(&mut self, paths: &Paths, value: Value) -> Result<()> {
-        todo!()
+        match self {
+            Value::Array(array) => array.route_get_mut(paths),
+            Value::Object(obj) => obj.route_get_mut(paths),
+            _ => {
+                if paths.is_empty() {
+                    Ok(self)
+                } else {
+                    Err(JsonError::BadPath)
+                }
+            }
+        }
     }
 
     fn route_replace<T>(&mut self, paths: &Paths, value: Value) -> Result<()> {
