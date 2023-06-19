@@ -4,6 +4,8 @@ use thiserror::Error;
 pub enum JsonError {
     #[error("The parameter: \"{0}\" is invalid for reason: {1}")]
     InvalidParameter(String, String),
+    #[error("Invalid operation")]
+    InvalidOperation,
     #[error("Unexpetec value reached while traversing path")]
     BadPath,
     /// Error serializing or deserializing a value
