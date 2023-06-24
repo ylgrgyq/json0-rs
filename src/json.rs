@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, hash::Hash, hash::Hasher, mem, vec};
+use std::{collections::BTreeMap, error, hash::Hash, hash::Hasher, mem, vec};
 
 use crate::error::{JsonError, Result};
 use serde::de::DeserializeOwned;
@@ -8,17 +8,60 @@ trait Validation {
     fn is_valid(&self) -> bool;
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 enum Path {
     Index(usize),
     Key(String),
 }
 
+#[derive(Debug)]
 struct Paths {
     paths: Vec<Path>,
 }
 
 impl Paths {
+    fn from_str(input: &str) -> Result<Paths> {
+        if !input.starts_with('[') {
+            return Err(JsonError::InvalidPathFormat);
+        }
+
+        if !input.ends_with(']') {
+            return Err(JsonError::InvalidPathFormat);
+        }
+
+        if input.len() <= 2 {
+            return Err(JsonError::InvalidPathFormat);
+        }
+
+        let paths_str = input[1..input.len() - 1].split(',');
+        let paths = paths_str
+            .map(Paths::path_str_to_path)
+            .collect::<Result<Vec<Path>>>()?;
+
+        Ok(Paths { paths })
+    }
+
+    fn path_str_to_path(input: &str) -> Result<Path> {
+        let p = str::trim(input);
+        if p.is_empty() {
+            return Err(JsonError::InvalidPathFormat);
+        }
+
+        if p.starts_with('\'') && p.ends_with('\'') {
+            return Ok(Path::Key(p[1..p.len() - 1].into()));
+        }
+
+        if p.starts_with('\"') && p.ends_with('\"') {
+            return Ok(Path::Key(p[1..p.len() - 1].into()));
+        }
+
+        if let Ok(i) = str::parse::<usize>(&p) {
+            return Ok(Path::Index(i));
+        }
+
+        Err(JsonError::InvalidPathElement(p.into()))
+    }
+
     fn first_key_path(&self) -> Result<&String> {
         let first_path = self.paths.first();
         if first_path.is_none() {
@@ -63,8 +106,10 @@ impl Paths {
         self.paths.len()
     }
 
-    fn next_level(&mut self) {
-        self.paths.remove(0);
+    fn next_level(&self) -> Paths {
+        Paths {
+            paths: self.paths[1..].to_vec(),
+        }
     }
 }
 
@@ -239,17 +284,15 @@ impl Appliable for Value {
 }
 
 impl Appliable for serde_json::Map<String, serde_json::Value> {
-    fn apply(&mut self, mut paths: Paths, operator: Operator) -> Result<()> {
+    fn apply(&mut self, paths: Paths, operator: Operator) -> Result<()> {
         let k = paths.first_key_path()?;
         let target_value = self.get_mut(k);
         if paths.len() > 1 {
-            if target_value.is_none() {
-                return Err(JsonError::InvalidOperation(
+            target_value
+                .map(|v| v.apply(paths, operator))
+                .unwrap_or(Err(JsonError::InvalidOperation(
                     "Operation can only apply on array or object".into(),
-                ));
-            }
-            paths.next_level();
-            target_value.unwrap().apply(paths, operator)
+                )))
         } else {
             match &operator {
                 Operator::AddNumber(v) => {
@@ -277,14 +320,18 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
                     Ok(())
                 }
                 Operator::ObjectDelete(delete_v) => {
-                    if target_value.is_some() && target_value.unwrap().eq(&delete_v) {
-                        self.remove(k);
+                    if let Some(target_v) = target_value {
+                        if target_v.eq(&delete_v) {
+                            self.remove(k);
+                        }
                     }
                     Ok(())
                 }
                 Operator::ObjectReplace(old_v, new_v) => {
-                    if target_value.is_some() && target_value.unwrap().eq(&old_v) {
-                        self.insert(k.clone(), new_v.clone());
+                    if let Some(target_v) = target_value {
+                        if target_v.eq(&old_v) {
+                            self.insert(k.clone(), new_v.clone());
+                        }
                     }
                     Ok(())
                 }
@@ -298,7 +345,68 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
 
 impl Appliable for Vec<serde_json::Value> {
     fn apply(&mut self, paths: Paths, operator: Operator) -> Result<()> {
-        todo!()
+        let index = paths.first_index_path()?;
+        let target_value = self.get_mut(*index);
+        if paths.len() > 1 {
+            target_value
+                .map(|v| v.apply(paths, operator))
+                .unwrap_or(Err(JsonError::InvalidOperation(
+                    "Operation can only apply on array or object".into(),
+                )))
+        } else {
+            match &operator {
+                Operator::AddNumber(v) => {
+                    if let Some(old_v) = target_value {
+                        match old_v {
+                            Value::Number(n) => {
+                                let new_v = n.as_u64().unwrap() + v.as_u64().unwrap();
+                                let serde_v = serde_json::to_value(new_v)?;
+                                self[*index] = serde_v;
+                                Ok(())
+                            }
+                            _ => {
+                                return Err(JsonError::InvalidOperation(
+                                    "Operation can only apply on array or object".into(),
+                                ))
+                            }
+                        }
+                    } else {
+                        self[*index] = v.clone();
+                        Ok(())
+                    }
+                }
+                Operator::ListInsert(v) => {
+                    self[*index] = v.clone();
+                    Ok(())
+                }
+                Operator::ListDelete(delete_v) => {
+                    if let Some(target_v) = target_value {
+                        if target_v.eq(&delete_v) {
+                            self.remove(*index);
+                        }
+                    }
+                    Ok(())
+                }
+                Operator::ListReplace(old_v, new_v) => {
+                    if let Some(target_v) = target_value {
+                        if target_v.eq(&old_v) {
+                            self[*index] = new_v.clone();
+                        }
+                    }
+                    Ok(())
+                }
+                Operator::ListMove(new_index) => {
+                    if let Some(target_v) = target_value {
+                        self[*new_index] = target_v.clone();
+                        self[*index] = Value::Null;
+                    }
+                    Ok(())
+                }
+                _ => Err(JsonError::InvalidOperation(
+                    "Operation can only apply on array or object".into(),
+                )),
+            }
+        }
     }
 }
 
@@ -345,13 +453,96 @@ impl JSON {
 
 #[cfg(test)]
 mod tests {
+
     use std::{
         io::{Read, Write},
+        str::FromStr,
         vec,
     };
 
     use super::*;
     use test_log::test;
+
+    #[test]
+    fn test_parse_invalid_path() {
+        assert_matches!(
+            Paths::from_str("]").unwrap_err(),
+            JsonError::InvalidPathFormat
+        );
+        assert_matches!(
+            Paths::from_str("[").unwrap_err(),
+            JsonError::InvalidPathFormat
+        );
+        assert_matches!(
+            Paths::from_str("").unwrap_err(),
+            JsonError::InvalidPathFormat
+        );
+        assert_matches!(
+            Paths::from_str("[]").unwrap_err(),
+            JsonError::InvalidPathFormat
+        );
+        assert_matches!(
+            Paths::from_str("hello").unwrap_err(),
+            JsonError::InvalidPathFormat
+        );
+        assert_matches!(
+            Paths::from_str("[hello]").unwrap_err(),
+            JsonError::InvalidPathElement(_)
+        );
+    }
+
+    #[test]
+    fn test_parse_index_path() {
+        let paths = Paths::from_str("[1]").unwrap();
+        assert_eq!(1, paths.len());
+        assert_eq!(1, *paths.first_index_path().unwrap());
+        let paths = Paths::from_str("[2, 3, 4]").unwrap();
+        assert_eq!(3, paths.len());
+        assert_eq!(2, *paths.first_index_path().unwrap());
+        let paths = paths.next_level();
+        assert_eq!(2, paths.len());
+        assert_eq!(3, *paths.first_index_path().unwrap());
+        let paths = paths.next_level();
+        assert_eq!(1, paths.len());
+        assert_eq!(4, *paths.first_index_path().unwrap());
+        let paths = paths.next_level();
+        assert!(paths.is_empty());
+    }
+
+    #[test]
+    fn test_parse_key_path() {
+        let paths = Paths::from_str("['hello']").unwrap();
+        assert_eq!(1, paths.len());
+        assert_eq!("hello", paths.first_key_path().unwrap());
+        let paths = Paths::from_str("['hello', \"word\", 'hello']").unwrap();
+        assert_eq!(3, paths.len());
+        assert_eq!("hello", paths.first_key_path().unwrap());
+        let paths = paths.next_level();
+        assert_eq!(2, paths.len());
+        assert_eq!("word", paths.first_key_path().unwrap());
+        let paths = paths.next_level();
+        assert_eq!(1, paths.len());
+        assert_eq!("hello", paths.first_key_path().unwrap());
+        let paths = paths.next_level();
+        assert!(paths.is_empty());
+    }
+
+    #[test]
+    fn test_parse_path_with_blanks() {
+        let paths = Paths::from_str("[ 'hello '  ,  1,  \"  world \",  4  ]").unwrap();
+        assert_eq!(4, paths.len());
+        assert_eq!("hello ", paths.first_key_path().unwrap());
+        let paths = paths.next_level();
+        assert_eq!(3, paths.len());
+        assert_eq!(1, *paths.first_index_path().unwrap());
+        let paths = paths.next_level();
+        assert_eq!(2, paths.len());
+        assert_eq!("  world ", paths.first_key_path().unwrap());
+        let paths = paths.next_level();
+        assert_eq!(4, *paths.first_index_path().unwrap());
+        let paths = paths.next_level();
+        assert!(paths.is_empty());
+    }
 
     #[test]
     fn test_create_file() {
