@@ -14,68 +14,55 @@ enum Path {
     Key(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Paths {
     paths: Vec<Path>,
 }
 
 impl Paths {
     fn from_str(input: &str) -> Result<Paths> {
-        if !input.starts_with('[') {
-            return Err(JsonError::InvalidPathFormat);
+        if let Ok(value) = serde_json::from_str(input) {
+            Paths::from_json_value(&value)
+        } else {
+            Err(JsonError::InvalidPathFormat)
         }
-
-        if !input.ends_with(']') {
-            return Err(JsonError::InvalidPathFormat);
-        }
-
-        if input.len() <= 2 {
-            return Err(JsonError::InvalidPathFormat);
-        }
-
-        let paths_str = input[1..input.len() - 1].split(',');
-        let paths = paths_str
-            .map(Paths::path_str_to_path)
-            .collect::<Result<Vec<Path>>>()?;
-
-        Ok(Paths { paths })
     }
 
-    fn path_str_to_path(input: &str) -> Result<Path> {
-        let p = str::trim(input);
-        if p.is_empty() {
-            return Err(JsonError::InvalidPathFormat);
+    fn from_json_value(value: &Value) -> Result<Paths> {
+        match value {
+            Value::Array(arr) => {
+                if arr.is_empty() {
+                    Err(JsonError::InvalidPathFormat)
+                } else {
+                    let paths = arr
+                        .iter()
+                        .map(|pe| match pe {
+                            Value::Number(n) => {
+                                if let Some(i) = n.as_u64() {
+                                    Ok(Path::Index(i as usize))
+                                } else {
+                                    Err(JsonError::InvalidPathElement(pe.to_string()))
+                                }
+                            }
+                            Value::String(k) => Ok(Path::Key(k.to_string())),
+                            _ => Err(JsonError::InvalidPathElement(pe.to_string())),
+                        })
+                        .collect::<Result<Vec<Path>>>()?;
+                    Ok(Paths { paths })
+                }
+            }
+            _ => Err(JsonError::InvalidPathFormat),
         }
-
-        if p.starts_with('\'') && p.ends_with('\'') {
-            return Ok(Path::Key(p[1..p.len() - 1].into()));
-        }
-
-        if p.starts_with('\"') && p.ends_with('\"') {
-            return Ok(Path::Key(p[1..p.len() - 1].into()));
-        }
-
-        if let Ok(i) = str::parse::<usize>(&p) {
-            return Ok(Path::Index(i));
-        }
-
-        Err(JsonError::InvalidPathElement(p.into()))
     }
 
     fn first_key_path(&self) -> Result<&String> {
         let first_path = self.paths.first();
         if first_path.is_none() {
-            return Err(JsonError::InvalidOperation(
-                "Operation can only apply on array or object".into(),
-            ));
+            return Err(JsonError::BadPath);
         }
 
         match first_path.unwrap() {
-            Path::Index(_) => {
-                return Err(JsonError::InvalidOperation(
-                    "Operation can only apply on array or object".into(),
-                ))
-            }
+            Path::Index(_) => return Err(JsonError::BadPath),
             Path::Key(k) => Ok(k),
         }
     }
@@ -114,7 +101,7 @@ impl Paths {
 }
 
 trait Routable {
-    fn route_get(&self, paths: &Paths) -> Result<Option<Value>>;
+    fn route_get(&self, paths: &Paths) -> Result<Option<&Value>>;
 
     fn route_get_mut(&mut self, paths: &Paths) -> Result<Option<&mut Value>>;
 
@@ -126,14 +113,14 @@ trait Routable {
 }
 
 impl Routable for Value {
-    fn route_get(&self, paths: &Paths) -> Result<Option<Value>> {
+    fn route_get(&self, paths: &Paths) -> Result<Option<&Value>> {
         match self {
             Value::Array(array) => array.route_get(paths),
             Value::Object(obj) => obj.route_get(paths),
             Value::Null => Ok(None),
             _ => {
                 if paths.is_empty() {
-                    Ok(Some(self.to_owned()))
+                    Ok(Some(self))
                 } else {
                     Err(JsonError::BadPath)
                 }
@@ -206,8 +193,13 @@ impl Routable for Value {
 }
 
 impl Routable for serde_json::Map<String, serde_json::Value> {
-    fn route_get(&self, paths: &Paths) -> Result<Option<Value>> {
-        todo!()
+    fn route_get(&self, paths: &Paths) -> Result<Option<&Value>> {
+        let k = paths.first_key_path()?;
+        if let Some(v) = self.get(k) {
+            v.route_get(&paths.next_level())
+        } else {
+            Ok(None)
+        }
     }
 
     fn route_get_mut(&mut self, paths: &Paths) -> Result<Option<&mut Value>> {
@@ -228,8 +220,13 @@ impl Routable for serde_json::Map<String, serde_json::Value> {
 }
 
 impl Routable for Vec<serde_json::Value> {
-    fn route_get(&self, paths: &Paths) -> Result<Option<Value>> {
-        todo!()
+    fn route_get(&self, paths: &Paths) -> Result<Option<&Value>> {
+        let i = paths.first_index_path()?;
+        if let Some(v) = self.get(*i) {
+            v.route_get(&paths.next_level())
+        } else {
+            Ok(None)
+        }
     }
 
     fn route_get_mut(&mut self, paths: &Paths) -> Result<Option<&mut Value>> {
@@ -249,6 +246,7 @@ impl Routable for Vec<serde_json::Value> {
     }
 }
 
+#[derive(Debug)]
 enum Operator {
     AddNumber(Value),
     ListInsert(Value),
@@ -260,9 +258,31 @@ enum Operator {
     ObjectReplace(Value, Value),
 }
 
+impl Operator {
+    fn from_json_value(input: &Value) -> Result<Operator> {
+        todo!()
+    }
+}
+
 struct OperationComponent {
     paths: Paths,
     operator: Operator,
+}
+
+impl OperationComponent {
+    fn from_str(input: &str) -> Result<OperationComponent> {
+        let json_value: Value = serde_json::from_str(input)?;
+        let path_value = json_value.get("path");
+
+        if path_value.is_none() {
+            return Err(JsonError::InvalidOperation("Missing path".into()));
+        }
+
+        let paths = Paths::from_json_value(path_value.unwrap())?;
+        let operator = Operator::from_json_value(&json_value)?;
+
+        Ok(OperationComponent { paths, operator })
+    }
 }
 
 trait Appliable {
@@ -274,6 +294,19 @@ impl Appliable for Value {
         match self {
             Value::Array(array) => array.apply(paths, operator),
             Value::Object(obj) => obj.apply(paths, operator),
+            Value::Number(n) => match operator {
+                Operator::AddNumber(v) => {
+                    let new_v = n.as_u64().unwrap() + v.as_u64().unwrap();
+                    let serde_v = serde_json::to_value(new_v)?;
+                    _ = mem::replace(self, serde_v);
+                    Ok(())
+                }
+                _ => {
+                    return Err(JsonError::InvalidOperation(
+                        "Operation can only apply on array or object".into(),
+                    ));
+                }
+            },
             _ => {
                 return Err(JsonError::InvalidOperation(
                     "Operation can only apply on array or object".into(),
@@ -297,19 +330,7 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
             match &operator {
                 Operator::AddNumber(v) => {
                     if let Some(old_v) = target_value {
-                        match old_v {
-                            Value::Number(n) => {
-                                let new_v = n.as_u64().unwrap() + v.as_u64().unwrap();
-                                let serde_v = serde_json::to_value(new_v)?;
-                                self.insert(k.clone(), serde_v);
-                                Ok(())
-                            }
-                            _ => {
-                                return Err(JsonError::InvalidOperation(
-                                    "Operation can only apply on array or object".into(),
-                                ))
-                            }
-                        }
+                        old_v.apply(paths, operator)
                     } else {
                         self.insert(k.clone(), v.clone());
                         Ok(())
@@ -417,9 +438,9 @@ pub struct JSON {
 }
 
 impl JSON {
-    pub fn from_str(input: &str) -> JSON {
-        let value = serde_json::json!(input);
-        JSON { value }
+    pub fn from_str(input: &str) -> Result<JSON> {
+        let value = serde_json::from_str(input)?;
+        Ok(JSON { value })
     }
 
     pub fn apply(&mut self, operations: Vec<Operation>) -> Result<()> {
@@ -431,7 +452,12 @@ impl JSON {
         Ok(())
     }
 
+    fn get(&self, paths: &Paths) -> Result<Option<&Value>> {
+        self.value.route_get(paths)
+    }
+
     fn get_mut_by_paths(&mut self, paths: Paths) {
+        // self.value.route_get(paths)
         // let mut v = &mut self.value;
         // for p in paths {
         //     match p {
@@ -487,7 +513,7 @@ mod tests {
         );
         assert_matches!(
             Paths::from_str("[hello]").unwrap_err(),
-            JsonError::InvalidPathElement(_)
+            JsonError::InvalidPathFormat
         );
     }
 
@@ -511,10 +537,10 @@ mod tests {
 
     #[test]
     fn test_parse_key_path() {
-        let paths = Paths::from_str("['hello']").unwrap();
+        let paths = Paths::from_str("[\"hello\"]").unwrap();
         assert_eq!(1, paths.len());
         assert_eq!("hello", paths.first_key_path().unwrap());
-        let paths = Paths::from_str("['hello', \"word\", 'hello']").unwrap();
+        let paths = Paths::from_str("[\"hello\", \"word\", \"hello\"]").unwrap();
         assert_eq!(3, paths.len());
         assert_eq!("hello", paths.first_key_path().unwrap());
         let paths = paths.next_level();
@@ -529,7 +555,7 @@ mod tests {
 
     #[test]
     fn test_parse_path_with_blanks() {
-        let paths = Paths::from_str("[ 'hello '  ,  1,  \"  world \",  4  ]").unwrap();
+        let paths = Paths::from_str("[ \"hello \"  ,  1,  \"  world \",  4  ]").unwrap();
         assert_eq!(4, paths.len());
         assert_eq!("hello ", paths.first_key_path().unwrap());
         let paths = paths.next_level();
@@ -545,13 +571,15 @@ mod tests {
     }
 
     #[test]
-    fn test_create_file() {
-        let mut a = JSON::from_str("{'level1': 10}");
-        a.apply(vec![vec![OperationComponent {
-            paths: Paths {
-                paths: vec![Path::Key("level1".into())],
-            },
+    fn test_apply_add_number() {
+        let mut json = JSON::from_str("{\"level1\": 10}").unwrap();
+        let paths = Paths::from_str("[\"level1\"]").unwrap();
+        json.apply(vec![vec![OperationComponent {
+            paths: paths.clone(),
             operator: Operator::AddNumber(serde_json::to_value(100).unwrap()),
-        }]]);
+        }]])
+        .unwrap();
+
+        assert_eq!(json.get(&paths).unwrap().unwrap().as_u64().unwrap(), 110);
     }
 }
