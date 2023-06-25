@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, error, hash::Hash, hash::Hasher, mem, vec};
+use std::{collections::BTreeMap, error, fmt::Display, hash::Hash, hash::Hasher, mem, vec};
 
 use crate::error::{JsonError, Result};
 use serde::de::DeserializeOwned;
@@ -15,7 +15,7 @@ enum Path {
 }
 
 #[derive(Debug, Clone)]
-struct Paths {
+pub struct Paths {
     paths: Vec<Path>,
 }
 
@@ -245,7 +245,7 @@ impl Routable for Vec<serde_json::Value> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Operator {
     AddNumber(Value),
     ListInsert(Value),
@@ -296,7 +296,7 @@ impl Operator {
             if let Some(od) = obj.get("od") {
                 return Ok(Operator::ObjectReplace(oi.clone(), od.clone()));
             }
-            return Ok(Operator::ListInsert(oi.clone()));
+            return Ok(Operator::ObjectInsert(oi.clone()));
         }
 
         if let Some(od) = obj.get("od") {
@@ -336,13 +336,14 @@ impl Operator {
     }
 }
 
-struct OperationComponent {
+#[derive(Clone, Debug)]
+pub struct OperationComponent {
     paths: Paths,
     operator: Operator,
 }
 
 impl OperationComponent {
-    fn from_str(input: &str) -> Result<OperationComponent> {
+    pub fn from_str(input: &str) -> Result<OperationComponent> {
         let json_value: Value = serde_json::from_str(input)?;
         let path_value = json_value.get("p");
 
@@ -354,6 +355,10 @@ impl OperationComponent {
         let operator = Operator::from_json_value(&json_value)?;
 
         Ok(OperationComponent { paths, operator })
+    }
+
+    pub fn get_paths(&self) -> &Paths {
+        &self.paths
     }
 }
 
@@ -375,7 +380,7 @@ impl Appliable for Value {
                 }
                 _ => {
                     return Err(JsonError::InvalidOperation(
-                        "Operation can only apply on array or object".into(),
+                        "Only AddNumber operation can apply to a Number JSON Value".into(),
                     ));
                 }
             },
@@ -393,8 +398,9 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
         let k = paths.first_key_path()?;
         let target_value = self.get_mut(k);
         if paths.len() > 1 {
+            let next_paths = paths.next_level();
             target_value
-                .map(|v| v.apply(paths, operator))
+                .map(|v| v.apply(next_paths, operator))
                 .unwrap_or(Err(JsonError::InvalidOperation(
                     "Operation can only apply on array or object".into(),
                 )))
@@ -441,8 +447,9 @@ impl Appliable for Vec<serde_json::Value> {
         let index = paths.first_index_path()?;
         let target_value = self.get_mut(*index);
         if paths.len() > 1 {
+            let next_paths = paths.next_level();
             target_value
-                .map(|v| v.apply(paths, operator))
+                .map(|v| v.apply(next_paths, operator))
                 .unwrap_or(Err(JsonError::InvalidOperation(
                     "Operation can only apply on array or object".into(),
                 )))
@@ -469,7 +476,7 @@ impl Appliable for Vec<serde_json::Value> {
                     }
                 }
                 Operator::ListInsert(v) => {
-                    self[*index] = v.clone();
+                    self.insert(*index, v.clone());
                     Ok(())
                 }
                 Operator::ListDelete(delete_v) => {
@@ -507,6 +514,12 @@ pub type Operation = Vec<OperationComponent>;
 
 pub struct JSON {
     value: Value,
+}
+
+impl Display for JSON {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.value.fmt(f)
+    }
 }
 
 impl JSON {
@@ -647,9 +660,17 @@ mod tests {
         let mut json = JSON::from_str("{\"level1\": 10}").unwrap();
         let operation_comp =
             OperationComponent::from_str("{\"p\":[\"level1\"], \"na\":100}").unwrap();
-        let paths = Paths::from_str("[\"level1\"]").unwrap();
-        json.apply(vec![vec![operation_comp]]).unwrap();
+        json.apply(vec![vec![operation_comp.clone()]]).unwrap();
 
-        assert_eq!(json.get(&paths).unwrap().unwrap().as_u64().unwrap(), 110);
+        assert_eq!(json.to_string(), r#"{"level1":110}"#);
+    }
+
+    #[test]
+    fn test_list_insert() {
+        let mut json = JSON::from_str(r#"{"level1": [10]}"#).unwrap();
+        let operation_comp =
+            OperationComponent::from_str(r#"{"p":["level1", 0], "li":1}"#).unwrap();
+        json.apply(vec![vec![operation_comp]]).unwrap();
+        assert_eq!(json.to_string(), r#"{"level1":[1,10]}"#);
     }
 }
