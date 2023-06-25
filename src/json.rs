@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, error, hash::Hash, hash::Hasher, mem, vec};
 
 use crate::error::{JsonError, Result};
 use serde::de::DeserializeOwned;
-use serde_json::{Number, Value};
+use serde_json::{Map, Number, Value};
 
 trait Validation {
     fn is_valid(&self) -> bool;
@@ -22,10 +22,9 @@ struct Paths {
 impl Paths {
     fn from_str(input: &str) -> Result<Paths> {
         if let Ok(value) = serde_json::from_str(input) {
-            Paths::from_json_value(&value)
-        } else {
-            Err(JsonError::InvalidPathFormat)
+            return Paths::from_json_value(&value);
         }
+        Err(JsonError::InvalidPathFormat)
     }
 
     fn from_json_value(value: &Value) -> Result<Paths> {
@@ -260,7 +259,80 @@ enum Operator {
 
 impl Operator {
     fn from_json_value(input: &Value) -> Result<Operator> {
-        todo!()
+        match input {
+            Value::Object(obj) => {
+                let operator = Operator::map_to_operator(obj)?;
+                operator.validate_json_object_size(obj)?;
+                Ok(operator)
+            }
+            _ => Err(JsonError::InvalidOperation(
+                "Operator can only be parsed from JSON Object".into(),
+            )),
+        }
+    }
+
+    fn map_to_operator(obj: &Map<String, Value>) -> Result<Operator> {
+        if let Some(na) = obj.get("na") {
+            return Ok(Operator::AddNumber(na.clone()));
+        }
+
+        if let Some(lm) = obj.get("lm") {
+            let i = Operator::value_to_index(lm)?;
+            return Ok(Operator::ListMove(i));
+        }
+
+        if let Some(li) = obj.get("li") {
+            if let Some(ld) = obj.get("ld") {
+                return Ok(Operator::ListReplace(li.clone(), ld.clone()));
+            }
+            return Ok(Operator::ListInsert(li.clone()));
+        }
+
+        if let Some(ld) = obj.get("ld") {
+            return Ok(Operator::ListDelete(ld.clone()));
+        }
+
+        if let Some(oi) = obj.get("oi") {
+            if let Some(od) = obj.get("od") {
+                return Ok(Operator::ObjectReplace(oi.clone(), od.clone()));
+            }
+            return Ok(Operator::ListInsert(oi.clone()));
+        }
+
+        if let Some(od) = obj.get("od") {
+            return Ok(Operator::ObjectDelete(od.clone()));
+        }
+
+        Err(JsonError::InvalidOperation("Unknown operator".into()))
+    }
+
+    fn validate_json_object_size(&self, obj: &Map<String, Value>) -> Result<()> {
+        let size = match self {
+            Operator::AddNumber(_) => 2,
+            Operator::ListInsert(_) => 2,
+            Operator::ListDelete(_) => 2,
+            Operator::ListReplace(_, _) => 3,
+            Operator::ListMove(_) => 2,
+            Operator::ObjectInsert(_) => 2,
+            Operator::ObjectDelete(_) => 2,
+            Operator::ObjectReplace(_, _) => 3,
+        };
+        if obj.len() != size {
+            return Err(JsonError::InvalidOperation(
+                "JSON object size bigger than operator required".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn value_to_index(val: &Value) -> Result<usize> {
+        if let Some(i) = val.as_u64() {
+            return Ok(i as usize);
+        }
+        return Err(JsonError::InvalidOperation(format!(
+            "{} can not parsed to index",
+            val.to_string()
+        )));
     }
 }
 
@@ -272,7 +344,7 @@ struct OperationComponent {
 impl OperationComponent {
     fn from_str(input: &str) -> Result<OperationComponent> {
         let json_value: Value = serde_json::from_str(input)?;
-        let path_value = json_value.get("path");
+        let path_value = json_value.get("p");
 
         if path_value.is_none() {
             return Err(JsonError::InvalidOperation("Missing path".into()));
@@ -573,12 +645,10 @@ mod tests {
     #[test]
     fn test_apply_add_number() {
         let mut json = JSON::from_str("{\"level1\": 10}").unwrap();
+        let operation_comp =
+            OperationComponent::from_str("{\"p\":[\"level1\"], \"na\":100}").unwrap();
         let paths = Paths::from_str("[\"level1\"]").unwrap();
-        json.apply(vec![vec![OperationComponent {
-            paths: paths.clone(),
-            operator: Operator::AddNumber(serde_json::to_value(100).unwrap()),
-        }]])
-        .unwrap();
+        json.apply(vec![vec![operation_comp]]).unwrap();
 
         assert_eq!(json.get(&paths).unwrap().unwrap().as_u64().unwrap(), 110);
     }
