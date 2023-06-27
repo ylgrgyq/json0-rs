@@ -103,12 +103,6 @@ trait Routable {
     fn route_get(&self, paths: &Paths) -> Result<Option<&Value>>;
 
     fn route_get_mut(&mut self, paths: &Paths) -> Result<Option<&mut Value>>;
-
-    fn route_insert(&mut self, paths: &Paths, value: Value) -> Result<()>;
-
-    fn route_delete(&mut self, paths: &Paths, value: Value) -> Result<()>;
-
-    fn route_replace(&mut self, paths: &Paths, value: Value) -> Result<()>;
 }
 
 impl Routable for Value {
@@ -140,55 +134,6 @@ impl Routable for Value {
             }
         }
     }
-
-    fn route_insert(&mut self, paths: &Paths, value: Value) -> Result<()> {
-        match self {
-            Value::Array(array) => array.route_insert(paths, value),
-            Value::Object(obj) => obj.route_insert(paths, value),
-            Value::Null => {
-                if paths.is_empty() {
-                    let new = serde_json::to_value(value)?;
-                    let old = mem::replace(self, new);
-                    Ok(serde_json::from_value(old)?)
-                } else {
-                    Err(JsonError::BadPath)
-                }
-            }
-            _ => Err(JsonError::BadPath),
-        }
-    }
-
-    fn route_delete(&mut self, paths: &Paths, value: Value) -> Result<()> {
-        match self {
-            Value::Array(array) => array.route_delete(paths, value),
-            Value::Object(obj) => obj.route_delete(paths, value),
-            Value::Null => {
-                if paths.is_empty() {
-                    let old = mem::replace(self, Value::Null);
-                    Ok(serde_json::from_value(old)?)
-                } else {
-                    Err(JsonError::BadPath)
-                }
-            }
-            _ => Err(JsonError::BadPath),
-        }
-    }
-
-    fn route_replace(&mut self, paths: &Paths, value: Value) -> Result<()> {
-        match self {
-            Value::Array(array) => array.route_replace(paths, value),
-            Value::Object(obj) => obj.route_replace(paths, value),
-            _ => {
-                if paths.is_empty() {
-                    let new = serde_json::to_value(value)?;
-                    let old = mem::replace(self, new);
-                    Ok(serde_json::from_value(old)?)
-                } else {
-                    Err(JsonError::BadPath)
-                }
-            }
-        }
-    }
 }
 
 impl Routable for serde_json::Map<String, serde_json::Value> {
@@ -202,18 +147,6 @@ impl Routable for serde_json::Map<String, serde_json::Value> {
     }
 
     fn route_get_mut(&mut self, paths: &Paths) -> Result<Option<&mut Value>> {
-        todo!()
-    }
-
-    fn route_insert(&mut self, paths: &Paths, value: Value) -> Result<()> {
-        todo!()
-    }
-
-    fn route_delete(&mut self, paths: &Paths, value: Value) -> Result<()> {
-        todo!()
-    }
-
-    fn route_replace(&mut self, paths: &Paths, value: Value) -> Result<()> {
         todo!()
     }
 }
@@ -231,18 +164,6 @@ impl Routable for Vec<serde_json::Value> {
     fn route_get_mut(&mut self, paths: &Paths) -> Result<Option<&mut Value>> {
         todo!()
     }
-
-    fn route_insert(&mut self, paths: &Paths, value: Value) -> Result<()> {
-        todo!()
-    }
-
-    fn route_delete(&mut self, paths: &Paths, value: Value) -> Result<()> {
-        todo!()
-    }
-
-    fn route_replace(&mut self, paths: &Paths, value: Value) -> Result<()> {
-        todo!()
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -254,6 +175,9 @@ enum Operator {
     ListMove(usize),
     ObjectInsert(Value),
     ObjectDelete(Value),
+    // Replace Object value from last value to first value.
+    // First value is the new value.
+    // Last value is the old value.
     ObjectReplace(Value, Value),
 }
 
@@ -426,7 +350,7 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
                     }
                     Ok(())
                 }
-                Operator::ObjectReplace(old_v, new_v) => {
+                Operator::ObjectReplace(new_v, old_v) => {
                     if let Some(target_v) = target_value {
                         if target_v.eq(&old_v) {
                             self.insert(k.clone(), new_v.clone());
@@ -476,7 +400,11 @@ impl Appliable for Vec<serde_json::Value> {
                     }
                 }
                 Operator::ListInsert(v) => {
-                    self.insert(*index, v.clone());
+                    if *index > self.len() {
+                        self.push(v.clone())
+                    } else {
+                        self.insert(*index, v.clone());
+                    }
                     Ok(())
                 }
                 Operator::ListDelete(delete_v) => {
@@ -512,6 +440,7 @@ impl Appliable for Vec<serde_json::Value> {
 
 pub type Operation = Vec<OperationComponent>;
 
+#[derive(Clone)]
 pub struct JSON {
     value: Value,
 }
@@ -666,11 +595,135 @@ mod tests {
     }
 
     #[test]
+    fn test_object_insert() {
+        let mut json = JSON::from_str(r#"{}"#).unwrap();
+        // insert to empty object
+        let operation_comp =
+            OperationComponent::from_str(r#"{"p":["level1"], "oi":{"level2":{}}}"#).unwrap();
+        json.apply(vec![vec![operation_comp]]).unwrap();
+        assert_eq!(json.to_string(), r#"{"level1":{"level2":{}}}"#);
+
+        // insert to inner object
+        let operation_comp = OperationComponent::from_str(
+            r#"{"p":["level1", "level2"], "oi":{"level3":[1, {"level4":{}}]}}"#,
+        )
+        .unwrap();
+        json.apply(vec![vec![operation_comp]]).unwrap();
+        assert_eq!(
+            json.to_string(),
+            r#"{"level1":{"level2":{"level3":[1,{"level4":{}}]}}}"#
+        );
+
+        // insert to deep inner object with number index in path
+        let operation_comp = OperationComponent::from_str(
+            r#"{"p":["level1", "level2", "level3", 1, "level4"], "oi":{"level5":[1, 2]}}"#,
+        )
+        .unwrap();
+        json.apply(vec![vec![operation_comp]]).unwrap();
+        assert_eq!(
+            json.to_string(),
+            r#"{"level1":{"level2":{"level3":[1,{"level4":{"level5":[1,2]}}]}}}"#
+        );
+
+        // replace key without compare
+        let operation_comp = OperationComponent::from_str(
+            r#"{"p":["level1", "level2", "level3", 1, "level4"], "oi":[3,4]}"#,
+        )
+        .unwrap();
+        json.apply(vec![vec![operation_comp]]).unwrap();
+        assert_eq!(
+            json.to_string(),
+            r#"{"level1":{"level2":{"level3":[1,{"level4":[3,4]}]}}}"#
+        );
+    }
+
+    #[test]
+    fn test_object_delete() {
+        let origin_json = JSON::from_str(
+            r#"{"level1":{"level2":{"level3":[1,{"level41":[1,2], "level42":[3,4]}]}}}"#,
+        )
+        .unwrap();
+
+        // delete to deep inner object with number index in path
+        let mut json = origin_json.clone();
+        let operation_comp = OperationComponent::from_str(
+            r#"{"p":["level1", "level2", "level3", 1, "level41"], "od":[1, 2]}"#,
+        )
+        .unwrap();
+        json.apply(vec![vec![operation_comp]]).unwrap();
+        assert_eq!(
+            json.to_string(),
+            r#"{"level1":{"level2":{"level3":[1,{"level42":[3,4]}]}}}"#
+        );
+
+        // delete to inner object
+        let mut json = origin_json.clone();
+        let operation_comp = OperationComponent::from_str(
+            r#"{"p":["level1", "level2", "level3"], "od":[1,{"level41":[1,2], "level42":[3,4]}]}"#,
+        )
+        .unwrap();
+        json.apply(vec![vec![operation_comp]]).unwrap();
+        assert_eq!(json.to_string(), r#"{"level1":{"level2":{}}}"#);
+    }
+
+    #[test]
+    fn test_object_replace() {
+        let origin_json = JSON::from_str(
+            r#"{"level1":{"level2":{"level3":[1,{"level41":[1,2], "level42":[3,4]}]}}}"#,
+        )
+        .unwrap();
+
+        // replace deep inner object with number index in path
+        let mut json = origin_json.clone();
+        let operation_comp = OperationComponent::from_str(
+            r#"{"p":["level1", "level2", "level3", 1, "level41"], "oi":{"5":"6"}, "od":[1, 2]}"#,
+        )
+        .unwrap();
+        json.apply(vec![vec![operation_comp]]).unwrap();
+        assert_eq!(
+            json.to_string(),
+            r#"{"level1":{"level2":{"level3":[1,{"level41":{"5":"6"},"level42":[3,4]}]}}}"#
+        );
+
+        // replace to inner object
+        let mut json = origin_json.clone();
+        let operation_comp = OperationComponent::from_str(
+            r#"{"p":["level1", "level2"], "oi":"hello", "od":{"level3":[1,{"level41":[1,2], "level42":[3,4]}]}}"#,
+        )
+        .unwrap();
+        json.apply(vec![vec![operation_comp]]).unwrap();
+        assert_eq!(json.to_string(), r#"{"level1":{"level2":"hello"}}"#);
+    }
+
+    #[test]
     fn test_list_insert() {
-        let mut json = JSON::from_str(r#"{"level1": [10]}"#).unwrap();
+        let mut json = JSON::from_str(r#"{"level1": []}"#).unwrap();
+
+        // insert to empty array
+        let operation_comp =
+            OperationComponent::from_str(r#"{"p":["level1", 0], "li":{"hello":[1]}}"#).unwrap();
+        json.apply(vec![vec![operation_comp]]).unwrap();
+        assert_eq!(json.to_string(), r#"{"level1":[{"hello":[1]}]}"#);
+
+        // insert to array
         let operation_comp =
             OperationComponent::from_str(r#"{"p":["level1", 0], "li":1}"#).unwrap();
         json.apply(vec![vec![operation_comp]]).unwrap();
-        assert_eq!(json.to_string(), r#"{"level1":[1,10]}"#);
+        assert_eq!(json.to_string(), r#"{"level1":[1,{"hello":[1]}]}"#);
+
+        // insert to inner array
+        let operation_comp =
+            OperationComponent::from_str(r#"{"p":["level1", 1, "hello",1], "li":[7,8]}"#).unwrap();
+        json.apply(vec![vec![operation_comp]]).unwrap();
+        assert_eq!(json.to_string(), r#"{"level1":[1,{"hello":[1,[7,8]]}]}"#);
+
+        // append
+        let operation_comp =
+            OperationComponent::from_str(r#"{"p":["level1", 10], "li":[2,3]}"#).unwrap();
+        json.apply(vec![vec![operation_comp]]).unwrap();
+        assert_eq!(
+            json.to_string(),
+            r#"{"level1":[1,{"hello":[1,[7,8]]},[2,3]]}"#
+        );
     }
 }
