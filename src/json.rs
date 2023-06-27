@@ -171,11 +171,14 @@ enum Operator {
     AddNumber(Value),
     ListInsert(Value),
     ListDelete(Value),
+    // Replace value from last value to first value in json array.
+    // First value is the new value.
+    // Last value is the old value.
     ListReplace(Value, Value),
     ListMove(usize),
     ObjectInsert(Value),
     ObjectDelete(Value),
-    // Replace Object value from last value to first value.
+    // Replace value from last value to first value in json object.
     // First value is the new value.
     // Last value is the old value.
     ObjectReplace(Value, Value),
@@ -415,7 +418,7 @@ impl Appliable for Vec<serde_json::Value> {
                     }
                     Ok(())
                 }
-                Operator::ListReplace(old_v, new_v) => {
+                Operator::ListReplace(new_v, old_v) => {
                     if let Some(target_v) = target_value {
                         if target_v.eq(&old_v) {
                             self[*index] = new_v.clone();
@@ -745,5 +748,31 @@ mod tests {
                 .unwrap();
         json.apply(vec![vec![operation_comp]]).unwrap();
         assert_eq!(json.to_string(), r#"{"level1":[1]}"#);
+    }
+
+    #[test]
+    fn test_list_replace() {
+        let origin_json = JSON::from_str(r#"{"level1":[1,{"hello":[1,[7,8]]}]}"#).unwrap();
+
+        // replace from innser array
+        let mut json = origin_json.clone();
+        let operation_comp = OperationComponent::from_str(
+            r#"{"p":["level1", 1, "hello", 1], "li":{"hello":"world"}, "ld":[7,8]}"#,
+        )
+        .unwrap();
+        json.apply(vec![vec![operation_comp]]).unwrap();
+        assert_eq!(
+            json.to_string(),
+            r#"{"level1":[1,{"hello":[1,{"hello":"world"}]}]}"#
+        );
+
+        // replace from inner object
+        let mut json = origin_json.clone();
+        let operation_comp = OperationComponent::from_str(
+            r#"{"p":["level1", 1], "li": {"hello":"world"}, "ld":{"hello":[1,[7,8]]}}"#,
+        )
+        .unwrap();
+        json.apply(vec![vec![operation_comp]]).unwrap();
+        assert_eq!(json.to_string(), r#"{"level1":[1,{"hello":"world"}]}"#);
     }
 }
