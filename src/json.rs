@@ -726,4 +726,24 @@ mod tests {
             r#"{"level1":[1,{"hello":[1,[7,8]]},[2,3]]}"#
         );
     }
+
+    #[test]
+    fn test_list_delete() {
+        let origin_json = JSON::from_str(r#"{"level1":[1,{"hello":[1,[7,8]]}]}"#).unwrap();
+
+        // delete from innser array
+        let mut json = origin_json.clone();
+        let operation_comp =
+            OperationComponent::from_str(r#"{"p":["level1", 1, "hello", 1], "ld":[7,8]}"#).unwrap();
+        json.apply(vec![vec![operation_comp]]).unwrap();
+        assert_eq!(json.to_string(), r#"{"level1":[1,{"hello":[1]}]}"#);
+
+        // delete from inner object
+        let mut json = origin_json.clone();
+        let operation_comp =
+            OperationComponent::from_str(r#"{"p":["level1", 1], "ld":{"hello":[1,[7,8]]}}"#)
+                .unwrap();
+        json.apply(vec![vec![operation_comp]]).unwrap();
+        assert_eq!(json.to_string(), r#"{"level1":[1]}"#);
+    }
 }
