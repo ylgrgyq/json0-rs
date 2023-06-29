@@ -1,6 +1,7 @@
 use std::{collections::BTreeMap, error, fmt::Display, hash::Hash, hash::Hasher, mem, vec};
 
 use crate::error::{JsonError, Result};
+use log::info;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Number, Value};
 
@@ -140,14 +141,24 @@ impl Routable for serde_json::Map<String, serde_json::Value> {
     fn route_get(&self, paths: &Paths) -> Result<Option<&Value>> {
         let k = paths.first_key_path()?;
         if let Some(v) = self.get(k) {
-            v.route_get(&paths.next_level())
+            let next_level = paths.next_level();
+            if next_level.is_empty() {
+                Ok(Some(v))
+            } else {
+                v.route_get(&next_level)
+            }
         } else {
             Ok(None)
         }
     }
 
     fn route_get_mut(&mut self, paths: &Paths) -> Result<Option<&mut Value>> {
-        todo!()
+        let k = paths.first_key_path()?;
+        if let Some(v) = self.get_mut(k) {
+            v.route_get_mut(&paths.next_level())
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -155,14 +166,24 @@ impl Routable for Vec<serde_json::Value> {
     fn route_get(&self, paths: &Paths) -> Result<Option<&Value>> {
         let i = paths.first_index_path()?;
         if let Some(v) = self.get(*i) {
-            v.route_get(&paths.next_level())
+            let next_level = paths.next_level();
+            if next_level.is_empty() {
+                Ok(Some(v))
+            } else {
+                v.route_get(&next_level)
+            }
         } else {
             Ok(None)
         }
     }
 
     fn route_get_mut(&mut self, paths: &Paths) -> Result<Option<&mut Value>> {
-        todo!()
+        let i = paths.first_index_path()?;
+        if let Some(v) = self.get_mut(*i) {
+            v.route_get_mut(&paths.next_level())
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -476,24 +497,6 @@ impl JSON {
         self.value.route_get(paths)
     }
 
-    fn get_mut_by_paths(&mut self, paths: Paths) {
-        // self.value.route_get(paths)
-        // let mut v = &mut self.value;
-        // for p in paths {
-        //     match p {
-        //         Path::Index(i) => {
-        //             if let &mut Value::Array(array) = v {
-        //                 if let Some(v2) = array.get_mut(i) {
-        //                     v = v2;
-        //                 }
-        //             } else {
-        //             }
-        //         }
-        //         Path::Key(k) => {}
-        //     }
-        // }
-    }
-
     fn is_valid_operations(op: Operation) {}
 }
 
@@ -507,6 +510,7 @@ mod tests {
     };
 
     use super::*;
+    use log::info;
     use test_log::test;
 
     #[test]
@@ -588,6 +592,55 @@ mod tests {
         assert_eq!(4, *paths.first_index_path().unwrap());
         let paths = paths.next_level();
         assert!(paths.is_empty());
+    }
+
+    #[test]
+    fn test_route_get_by_path_only_has_object() {
+        let json = JSON::from_str(r#"{"level1":"world", "level12":{"level2":"world2"}}"#).unwrap();
+
+        // simple path with only object
+        let paths = Paths::from_str(r#"["level1"]"#).unwrap();
+        assert_eq!(json.get(&paths).unwrap().unwrap().to_string(), r#""world""#);
+        let paths = Paths::from_str(r#"["level12", "level2"]"#).unwrap();
+        assert_eq!(
+            json.get(&paths).unwrap().unwrap().to_string(),
+            r#""world2""#
+        );
+        let paths = Paths::from_str(r#"["level3"]"#).unwrap();
+        assert!(json.get(&paths).unwrap().is_none());
+
+        // complex path with array
+        let json =
+            JSON::from_str(r#"{"level1":[1,{"hello":[1,[7,8]]}], "level12":"world"}"#).unwrap();
+        let paths = Paths::from_str(r#"["level1", 1, "hello"]"#).unwrap();
+
+        assert_eq!(
+            json.get(&paths).unwrap().unwrap().to_string(),
+            r#"[1,[7,8]]"#
+        );
+    }
+
+    #[test]
+    fn test_route_get_by_path_has_array() {
+        let json = JSON::from_str(r#"{"level1":["a","b"], "level12":[123, {"level2":["c","d"]}]}"#)
+            .unwrap();
+        // simple path
+        let paths = Paths::from_str(r#"["level1", 1]"#).unwrap();
+        assert_eq!(json.get(&paths).unwrap().unwrap().to_string(), r#""b""#);
+        let paths = Paths::from_str(r#"["level12", 0]"#).unwrap();
+
+        // complex path
+        assert_eq!(json.get(&paths).unwrap().unwrap().to_string(), r#"123"#);
+        let paths = Paths::from_str(r#"["level12", 1, "level2"]"#).unwrap();
+        assert_eq!(
+            json.get(&paths).unwrap().unwrap().to_string(),
+            r#"["c","d"]"#
+        );
+        let json =
+            JSON::from_str(r#"{"level1":[1,{"hello":[1,[7,8]]}], "level12":"world"}"#).unwrap();
+        let paths = Paths::from_str(r#"["level1", 1, "hello", 1]"#).unwrap();
+
+        assert_eq!(json.get(&paths).unwrap().unwrap().to_string(), r#"[7,8]"#);
     }
 
     #[test]
