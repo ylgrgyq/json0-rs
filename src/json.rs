@@ -428,8 +428,11 @@ impl Appliable for Vec<serde_json::Value> {
                 }
                 Operator::ListMove(new_index) => {
                     if let Some(target_v) = target_value {
-                        self[*new_index] = target_v.clone();
-                        self[*index] = Value::Null;
+                        if *index != *new_index {
+                            let new_v = target_v.clone();
+                            self.remove(*index);
+                            self.insert(*new_index, new_v);
+                        }
                     }
                     Ok(())
                 }
@@ -774,5 +777,40 @@ mod tests {
         .unwrap();
         json.apply(vec![vec![operation_comp]]).unwrap();
         assert_eq!(json.to_string(), r#"{"level1":[1,{"hello":"world"}]}"#);
+    }
+
+    #[test]
+    fn test_list_move() {
+        let origin_json = JSON::from_str(r#"{"level1":[1,{"hello":[1,[7,8], 9, 10]}]}"#).unwrap();
+
+        // move left
+        let mut json = origin_json.clone();
+        let operation_comp =
+            OperationComponent::from_str(r#"{"p":["level1", 1, "hello", 2], "lm":1}"#).unwrap();
+        json.apply(vec![vec![operation_comp]]).unwrap();
+        assert_eq!(
+            json.to_string(),
+            r#"{"level1":[1,{"hello":[1,9,[7,8],10]}]}"#
+        );
+
+        // move right
+        let mut json = origin_json.clone();
+        let operation_comp =
+            OperationComponent::from_str(r#"{"p":["level1", 1, "hello", 1], "lm":2}"#).unwrap();
+        json.apply(vec![vec![operation_comp]]).unwrap();
+        assert_eq!(
+            json.to_string(),
+            r#"{"level1":[1,{"hello":[1,9,[7,8],10]}]}"#
+        );
+
+        // stay put
+        let mut json = origin_json.clone();
+        let operation_comp =
+            OperationComponent::from_str(r#"{"p":["level1", 1, "hello", 1], "lm":1}"#).unwrap();
+        json.apply(vec![vec![operation_comp]]).unwrap();
+        assert_eq!(
+            json.to_string(),
+            r#"{"level1":[1,{"hello":[1,[7,8],9,10]}]}"#
+        );
     }
 }
