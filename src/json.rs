@@ -67,7 +67,12 @@ impl Routable for serde_json::Map<String, serde_json::Value> {
     fn route_get_mut(&mut self, paths: &Path) -> Result<Option<&mut Value>> {
         let k = paths.first_key_path().ok_or(JsonError::BadPath)?;
         if let Some(v) = self.get_mut(k) {
-            v.route_get_mut(&paths.next_level())
+            let next_level = paths.next_level();
+            if next_level.is_empty() {
+                Ok(Some(v))
+            } else {
+                v.route_get_mut(&next_level)
+            }
         } else {
             Ok(None)
         }
@@ -92,7 +97,12 @@ impl Routable for Vec<serde_json::Value> {
     fn route_get_mut(&mut self, paths: &Path) -> Result<Option<&mut Value>> {
         let i = paths.first_index_path().ok_or(JsonError::BadPath)?;
         if let Some(v) = self.get_mut(*i) {
-            v.route_get_mut(&paths.next_level())
+            let next_level = paths.next_level();
+            if next_level.is_empty() {
+                Ok(Some(v))
+            } else {
+                v.route_get_mut(&next_level)
+            }
         } else {
             Ok(None)
         }
@@ -228,6 +238,13 @@ trait Appliable {
 
 impl Appliable for Value {
     fn apply(&mut self, paths: Path, operator: Operator) -> Result<()> {
+        if paths.len() > 1 {
+            let (left, right) = paths.split_at(paths.len() - 1);
+            return self
+                .route_get_mut(&left)?
+                .ok_or(JsonError::BadPath)?
+                .apply(right, operator);
+        }
         match self {
             Value::Array(array) => array.apply(paths, operator),
             Value::Object(obj) => obj.apply(paths, operator),
@@ -255,124 +272,102 @@ impl Appliable for Value {
 
 impl Appliable for serde_json::Map<String, serde_json::Value> {
     fn apply(&mut self, paths: Path, operator: Operator) -> Result<()> {
+        assert!(paths.len() == 1);
+
         let k = paths.first_key_path().ok_or(JsonError::BadPath)?;
         let target_value = self.get_mut(k);
-        if paths.len() > 1 {
-            let next_paths = paths.next_level();
-            target_value
-                .map(|v| v.apply(next_paths, operator))
-                .unwrap_or(Err(JsonError::InvalidOperation(
-                    "Operation can only apply on array or object".into(),
-                )))
-        } else {
-            match &operator {
-                Operator::AddNumber(v) => {
-                    if let Some(old_v) = target_value {
-                        old_v.apply(paths, operator)
-                    } else {
-                        self.insert(k.clone(), v.clone());
-                        Ok(())
-                    }
-                }
-                Operator::ObjectInsert(v) => {
+        match &operator {
+            Operator::AddNumber(v) => {
+                if let Some(old_v) = target_value {
+                    old_v.apply(paths, operator)
+                } else {
                     self.insert(k.clone(), v.clone());
                     Ok(())
                 }
-                Operator::ObjectDelete(delete_v) => {
-                    if let Some(target_v) = target_value {
-                        if target_v.eq(&delete_v) {
-                            self.remove(k);
-                        }
-                    }
-                    Ok(())
-                }
-                Operator::ObjectReplace(new_v, old_v) => {
-                    if let Some(target_v) = target_value {
-                        if target_v.eq(&old_v) {
-                            self.insert(k.clone(), new_v.clone());
-                        }
-                    }
-                    Ok(())
-                }
-                _ => Err(JsonError::InvalidOperation(
-                    "Operation can only apply on array or object".into(),
-                )),
             }
+            Operator::ObjectInsert(v) => {
+                self.insert(k.clone(), v.clone());
+                Ok(())
+            }
+            Operator::ObjectDelete(delete_v) => {
+                if let Some(target_v) = target_value {
+                    if target_v.eq(&delete_v) {
+                        self.remove(k);
+                    }
+                }
+                Ok(())
+            }
+            Operator::ObjectReplace(new_v, old_v) => {
+                if let Some(target_v) = target_value {
+                    if target_v.eq(&old_v) {
+                        self.insert(k.clone(), new_v.clone());
+                    }
+                }
+                Ok(())
+            }
+            _ => Err(JsonError::BadPath),
         }
     }
 }
 
 impl Appliable for Vec<serde_json::Value> {
     fn apply(&mut self, paths: Path, operator: Operator) -> Result<()> {
+        assert!(paths.len() == 1);
+
         let index = paths.first_index_path().ok_or(JsonError::BadPath)?;
         let target_value = self.get_mut(*index);
-        if paths.len() > 1 {
-            let next_paths = paths.next_level();
-            target_value
-                .map(|v| v.apply(next_paths, operator))
-                .unwrap_or(Err(JsonError::InvalidOperation(
-                    "Operation can only apply on array or object".into(),
-                )))
-        } else {
-            match &operator {
-                Operator::AddNumber(v) => {
-                    if let Some(old_v) = target_value {
-                        match old_v {
-                            Value::Number(n) => {
-                                let new_v = n.as_u64().unwrap() + v.as_u64().unwrap();
-                                let serde_v = serde_json::to_value(new_v)?;
-                                self[*index] = serde_v;
-                                Ok(())
-                            }
-                            _ => {
-                                return Err(JsonError::InvalidOperation(
-                                    "Operation can only apply on array or object".into(),
-                                ))
-                            }
+        match &operator {
+            Operator::AddNumber(v) => {
+                if let Some(old_v) = target_value {
+                    match old_v {
+                        Value::Number(n) => {
+                            let new_v = n.as_u64().unwrap() + v.as_u64().unwrap();
+                            let serde_v = serde_json::to_value(new_v)?;
+                            self[*index] = serde_v;
+                            Ok(())
                         }
-                    } else {
-                        self[*index] = v.clone();
-                        Ok(())
+                        _ => return Err(JsonError::BadPath),
                     }
-                }
-                Operator::ListInsert(v) => {
-                    if *index > self.len() {
-                        self.push(v.clone())
-                    } else {
-                        self.insert(*index, v.clone());
-                    }
+                } else {
+                    self[*index] = v.clone();
                     Ok(())
                 }
-                Operator::ListDelete(delete_v) => {
-                    if let Some(target_v) = target_value {
-                        if target_v.eq(&delete_v) {
-                            self.remove(*index);
-                        }
-                    }
-                    Ok(())
-                }
-                Operator::ListReplace(new_v, old_v) => {
-                    if let Some(target_v) = target_value {
-                        if target_v.eq(&old_v) {
-                            self[*index] = new_v.clone();
-                        }
-                    }
-                    Ok(())
-                }
-                Operator::ListMove(new_index) => {
-                    if let Some(target_v) = target_value {
-                        if *index != *new_index {
-                            let new_v = target_v.clone();
-                            self.remove(*index);
-                            self.insert(*new_index, new_v);
-                        }
-                    }
-                    Ok(())
-                }
-                _ => Err(JsonError::InvalidOperation(
-                    "Operation can only apply on array or object".into(),
-                )),
             }
+            Operator::ListInsert(v) => {
+                if *index > self.len() {
+                    self.push(v.clone())
+                } else {
+                    self.insert(*index, v.clone());
+                }
+                Ok(())
+            }
+            Operator::ListDelete(delete_v) => {
+                if let Some(target_v) = target_value {
+                    if target_v.eq(&delete_v) {
+                        self.remove(*index);
+                    }
+                }
+                Ok(())
+            }
+            Operator::ListReplace(new_v, old_v) => {
+                if let Some(target_v) = target_value {
+                    if target_v.eq(&old_v) {
+                        self[*index] = new_v.clone();
+                    }
+                }
+                Ok(())
+            }
+            Operator::ListMove(new_index) => {
+                if let Some(target_v) = target_value {
+                    if *index != *new_index {
+                        let new_v = target_v.clone();
+                        self.remove(*index);
+                        self.insert(*new_index, new_v);
+                    }
+                }
+                Ok(())
+            }
+            _ => Err(JsonError::BadPath),
         }
     }
 }
