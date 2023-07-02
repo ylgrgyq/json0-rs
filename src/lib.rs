@@ -1,6 +1,6 @@
-pub mod json;
-
 mod error;
+pub mod json;
+pub mod path;
 
 #[cfg(test)]
 #[macro_use]
