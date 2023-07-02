@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, error, fmt::Display, hash::Hash, hash::Hasher, 
 
 use crate::{
     error::{JsonError, Result},
-    path::Paths,
+    path::Path,
 };
 use log::info;
 use serde::de::DeserializeOwned;
@@ -13,13 +13,13 @@ trait Validation {
 }
 
 trait Routable {
-    fn route_get(&self, paths: &Paths) -> Result<Option<&Value>>;
+    fn route_get(&self, paths: &Path) -> Result<Option<&Value>>;
 
-    fn route_get_mut(&mut self, paths: &Paths) -> Result<Option<&mut Value>>;
+    fn route_get_mut(&mut self, paths: &Path) -> Result<Option<&mut Value>>;
 }
 
 impl Routable for Value {
-    fn route_get(&self, paths: &Paths) -> Result<Option<&Value>> {
+    fn route_get(&self, paths: &Path) -> Result<Option<&Value>> {
         match self {
             Value::Array(array) => array.route_get(paths),
             Value::Object(obj) => obj.route_get(paths),
@@ -34,7 +34,7 @@ impl Routable for Value {
         }
     }
 
-    fn route_get_mut(&mut self, paths: &Paths) -> Result<Option<&mut Value>> {
+    fn route_get_mut(&mut self, paths: &Path) -> Result<Option<&mut Value>> {
         match self {
             Value::Array(array) => array.route_get_mut(paths),
             Value::Object(obj) => obj.route_get_mut(paths),
@@ -50,7 +50,7 @@ impl Routable for Value {
 }
 
 impl Routable for serde_json::Map<String, serde_json::Value> {
-    fn route_get(&self, paths: &Paths) -> Result<Option<&Value>> {
+    fn route_get(&self, paths: &Path) -> Result<Option<&Value>> {
         let k = paths.first_key_path().ok_or(JsonError::BadPath)?;
         if let Some(v) = self.get(k) {
             let next_level = paths.next_level();
@@ -64,7 +64,7 @@ impl Routable for serde_json::Map<String, serde_json::Value> {
         }
     }
 
-    fn route_get_mut(&mut self, paths: &Paths) -> Result<Option<&mut Value>> {
+    fn route_get_mut(&mut self, paths: &Path) -> Result<Option<&mut Value>> {
         let k = paths.first_key_path().ok_or(JsonError::BadPath)?;
         if let Some(v) = self.get_mut(k) {
             v.route_get_mut(&paths.next_level())
@@ -75,7 +75,7 @@ impl Routable for serde_json::Map<String, serde_json::Value> {
 }
 
 impl Routable for Vec<serde_json::Value> {
-    fn route_get(&self, paths: &Paths) -> Result<Option<&Value>> {
+    fn route_get(&self, paths: &Path) -> Result<Option<&Value>> {
         let i = paths.first_index_path().ok_or(JsonError::BadPath)?;
         if let Some(v) = self.get(*i) {
             let next_level = paths.next_level();
@@ -89,7 +89,7 @@ impl Routable for Vec<serde_json::Value> {
         }
     }
 
-    fn route_get_mut(&mut self, paths: &Paths) -> Result<Option<&mut Value>> {
+    fn route_get_mut(&mut self, paths: &Path) -> Result<Option<&mut Value>> {
         let i = paths.first_index_path().ok_or(JsonError::BadPath)?;
         if let Some(v) = self.get_mut(*i) {
             v.route_get_mut(&paths.next_level())
@@ -198,7 +198,7 @@ impl Operator {
 
 #[derive(Clone, Debug)]
 pub struct OperationComponent {
-    paths: Paths,
+    paths: Path,
     operator: Operator,
 }
 
@@ -211,23 +211,23 @@ impl OperationComponent {
             return Err(JsonError::InvalidOperation("Missing path".into()));
         }
 
-        let paths = Paths::from_json_value(path_value.unwrap())?;
+        let paths = Path::from_json_value(path_value.unwrap())?;
         let operator = Operator::from_json_value(&json_value)?;
 
         Ok(OperationComponent { paths, operator })
     }
 
-    pub fn get_paths(&self) -> &Paths {
+    pub fn get_paths(&self) -> &Path {
         &self.paths
     }
 }
 
 trait Appliable {
-    fn apply(&mut self, paths: Paths, operator: Operator) -> Result<()>;
+    fn apply(&mut self, paths: Path, operator: Operator) -> Result<()>;
 }
 
 impl Appliable for Value {
-    fn apply(&mut self, paths: Paths, operator: Operator) -> Result<()> {
+    fn apply(&mut self, paths: Path, operator: Operator) -> Result<()> {
         match self {
             Value::Array(array) => array.apply(paths, operator),
             Value::Object(obj) => obj.apply(paths, operator),
@@ -254,7 +254,7 @@ impl Appliable for Value {
 }
 
 impl Appliable for serde_json::Map<String, serde_json::Value> {
-    fn apply(&mut self, paths: Paths, operator: Operator) -> Result<()> {
+    fn apply(&mut self, paths: Path, operator: Operator) -> Result<()> {
         let k = paths.first_key_path().ok_or(JsonError::BadPath)?;
         let target_value = self.get_mut(k);
         if paths.len() > 1 {
@@ -303,7 +303,7 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
 }
 
 impl Appliable for Vec<serde_json::Value> {
-    fn apply(&mut self, paths: Paths, operator: Operator) -> Result<()> {
+    fn apply(&mut self, paths: Path, operator: Operator) -> Result<()> {
         let index = paths.first_index_path().ok_or(JsonError::BadPath)?;
         let target_value = self.get_mut(*index);
         if paths.len() > 1 {
@@ -405,7 +405,7 @@ impl JSON {
         Ok(())
     }
 
-    pub fn get(&self, paths: &Paths) -> Result<Option<&Value>> {
+    pub fn get(&self, paths: &Path) -> Result<Option<&Value>> {
         self.value.route_get(paths)
     }
 }
@@ -419,6 +419,8 @@ mod tests {
         vec,
     };
 
+    use crate::path::Path;
+
     use super::*;
     use log::info;
     use test_log::test;
@@ -428,20 +430,20 @@ mod tests {
         let json = JSON::from_str(r#"{"level1":"world", "level12":{"level2":"world2"}}"#).unwrap();
 
         // simple path with only object
-        let paths = Paths::from_str(r#"["level1"]"#).unwrap();
+        let paths = Path::from_str(r#"["level1"]"#).unwrap();
         assert_eq!(json.get(&paths).unwrap().unwrap().to_string(), r#""world""#);
-        let paths = Paths::from_str(r#"["level12", "level2"]"#).unwrap();
+        let paths = Path::from_str(r#"["level12", "level2"]"#).unwrap();
         assert_eq!(
             json.get(&paths).unwrap().unwrap().to_string(),
             r#""world2""#
         );
-        let paths = Paths::from_str(r#"["level3"]"#).unwrap();
+        let paths = Path::from_str(r#"["level3"]"#).unwrap();
         assert!(json.get(&paths).unwrap().is_none());
 
         // complex path with array
         let json =
             JSON::from_str(r#"{"level1":[1,{"hello":[1,[7,8]]}], "level12":"world"}"#).unwrap();
-        let paths = Paths::from_str(r#"["level1", 1, "hello"]"#).unwrap();
+        let paths = Path::from_str(r#"["level1", 1, "hello"]"#).unwrap();
 
         assert_eq!(
             json.get(&paths).unwrap().unwrap().to_string(),
@@ -454,20 +456,20 @@ mod tests {
         let json = JSON::from_str(r#"{"level1":["a","b"], "level12":[123, {"level2":["c","d"]}]}"#)
             .unwrap();
         // simple path
-        let paths = Paths::from_str(r#"["level1", 1]"#).unwrap();
+        let paths = Path::from_str(r#"["level1", 1]"#).unwrap();
         assert_eq!(json.get(&paths).unwrap().unwrap().to_string(), r#""b""#);
-        let paths = Paths::from_str(r#"["level12", 0]"#).unwrap();
+        let paths = Path::from_str(r#"["level12", 0]"#).unwrap();
 
         // complex path
         assert_eq!(json.get(&paths).unwrap().unwrap().to_string(), r#"123"#);
-        let paths = Paths::from_str(r#"["level12", 1, "level2"]"#).unwrap();
+        let paths = Path::from_str(r#"["level12", 1, "level2"]"#).unwrap();
         assert_eq!(
             json.get(&paths).unwrap().unwrap().to_string(),
             r#"["c","d"]"#
         );
         let json =
             JSON::from_str(r#"{"level1":[1,{"hello":[1,[7,8]]}], "level12":"world"}"#).unwrap();
-        let paths = Paths::from_str(r#"["level1", 1, "hello", 1]"#).unwrap();
+        let paths = Path::from_str(r#"["level1", 1, "hello", 1]"#).unwrap();
 
         assert_eq!(json.get(&paths).unwrap().unwrap().to_string(), r#"[7,8]"#);
     }
