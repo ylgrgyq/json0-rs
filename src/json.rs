@@ -51,7 +51,7 @@ impl Routable for Value {
 
 impl Routable for serde_json::Map<String, serde_json::Value> {
     fn route_get(&self, paths: &Paths) -> Result<Option<&Value>> {
-        let k = paths.first_key_path()?;
+        let k = paths.first_key_path().ok_or(JsonError::BadPath)?;
         if let Some(v) = self.get(k) {
             let next_level = paths.next_level();
             if next_level.is_empty() {
@@ -65,7 +65,7 @@ impl Routable for serde_json::Map<String, serde_json::Value> {
     }
 
     fn route_get_mut(&mut self, paths: &Paths) -> Result<Option<&mut Value>> {
-        let k = paths.first_key_path()?;
+        let k = paths.first_key_path().ok_or(JsonError::BadPath)?;
         if let Some(v) = self.get_mut(k) {
             v.route_get_mut(&paths.next_level())
         } else {
@@ -76,7 +76,7 @@ impl Routable for serde_json::Map<String, serde_json::Value> {
 
 impl Routable for Vec<serde_json::Value> {
     fn route_get(&self, paths: &Paths) -> Result<Option<&Value>> {
-        let i = paths.first_index_path()?;
+        let i = paths.first_index_path().ok_or(JsonError::BadPath)?;
         if let Some(v) = self.get(*i) {
             let next_level = paths.next_level();
             if next_level.is_empty() {
@@ -90,7 +90,7 @@ impl Routable for Vec<serde_json::Value> {
     }
 
     fn route_get_mut(&mut self, paths: &Paths) -> Result<Option<&mut Value>> {
-        let i = paths.first_index_path()?;
+        let i = paths.first_index_path().ok_or(JsonError::BadPath)?;
         if let Some(v) = self.get_mut(*i) {
             v.route_get_mut(&paths.next_level())
         } else {
@@ -255,7 +255,7 @@ impl Appliable for Value {
 
 impl Appliable for serde_json::Map<String, serde_json::Value> {
     fn apply(&mut self, paths: Paths, operator: Operator) -> Result<()> {
-        let k = paths.first_key_path()?;
+        let k = paths.first_key_path().ok_or(JsonError::BadPath)?;
         let target_value = self.get_mut(k);
         if paths.len() > 1 {
             let next_paths = paths.next_level();
@@ -304,7 +304,7 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
 
 impl Appliable for Vec<serde_json::Value> {
     fn apply(&mut self, paths: Paths, operator: Operator) -> Result<()> {
-        let index = paths.first_index_path()?;
+        let index = paths.first_index_path().ok_or(JsonError::BadPath)?;
         let target_value = self.get_mut(*index);
         if paths.len() > 1 {
             let next_paths = paths.next_level();
@@ -405,11 +405,9 @@ impl JSON {
         Ok(())
     }
 
-    fn get(&self, paths: &Paths) -> Result<Option<&Value>> {
+    pub fn get(&self, paths: &Paths) -> Result<Option<&Value>> {
         self.value.route_get(paths)
     }
-
-    fn is_valid_operations(op: Operation) {}
 }
 
 #[cfg(test)]

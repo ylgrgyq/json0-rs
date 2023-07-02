@@ -48,27 +48,27 @@ impl Paths {
         }
     }
 
-    pub fn first_key_path(&self) -> Result<&String> {
+    pub fn first_key_path(&self) -> Option<&String> {
         let first_path = self.paths.first();
         if first_path.is_none() {
-            return Err(JsonError::BadPath);
+            return None;
         }
 
         match first_path.unwrap() {
-            Path::Index(_) => return Err(JsonError::BadPath),
-            Path::Key(k) => Ok(k),
+            Path::Index(_) => None,
+            Path::Key(k) => Some(k),
         }
     }
 
-    pub fn first_index_path(&self) -> Result<&usize> {
+    pub fn first_index_path(&self) -> Option<&usize> {
         let first_path = self.paths.first();
         if first_path.is_none() {
-            return Err(JsonError::BadPath);
+            return None;
         }
 
         match first_path.unwrap() {
-            Path::Index(i) => Ok(i),
-            Path::Key(_) => return Err(JsonError::BadPath),
+            Path::Index(i) => Some(i),
+            Path::Key(_) => None,
         }
     }
 
@@ -84,17 +84,6 @@ impl Paths {
         Paths {
             paths: self.paths[1..].to_vec(),
         }
-    }
-}
-
-impl<Idx> std::ops::Index<Idx> for Paths
-where
-    Idx: std::slice::SliceIndex<[Path]>,
-{
-    type Output = Idx::Output;
-
-    fn index(&self, index: Idx) -> &Self::Output {
-        &self.paths[index]
     }
 }
 
