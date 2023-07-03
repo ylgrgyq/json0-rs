@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, error, fmt::Display, hash::Hash, hash::Hasher, 
 
 use crate::{
     error::{JsonError, Result},
-    path::Path,
+    path::{Path, PathElement},
 };
 use log::info;
 use serde::de::DeserializeOwned;
@@ -208,7 +208,7 @@ impl Operator {
 
 #[derive(Clone, Debug)]
 pub struct OperationComponent {
-    paths: Path,
+    path: Path,
     operator: Operator,
 }
 
@@ -224,11 +224,14 @@ impl OperationComponent {
         let paths = Path::from_json_value(path_value.unwrap())?;
         let operator = Operator::from_json_value(&json_value)?;
 
-        Ok(OperationComponent { paths, operator })
+        Ok(OperationComponent {
+            path: paths,
+            operator,
+        })
     }
 
     pub fn get_paths(&self) -> &Path {
-        &self.paths
+        &self.path
     }
 }
 
@@ -374,6 +377,42 @@ impl Appliable for Vec<serde_json::Value> {
 
 pub type Operation = Vec<OperationComponent>;
 
+pub struct Transformer {}
+
+impl Transformer {
+    fn append(&self, operations: Vec<Operation>, op: OperationComponent) {
+        todo!()
+    }
+
+    fn invert(&self, operation: OperationComponent) -> OperationComponent {
+        let mut path = operation.get_paths().clone();
+        let operator = match operation.operator {
+            Operator::AddNumber(n) => {
+                Operator::AddNumber(serde_json::to_value(-n.as_i64().unwrap()).unwrap())
+            }
+            Operator::ListInsert(v) => Operator::ListDelete(v),
+            Operator::ListDelete(v) => Operator::ListInsert(v),
+            Operator::ListReplace(new_v, old_v) => Operator::ListReplace(old_v, new_v),
+            Operator::ListMove(new) => {
+                let old_p = path.replace(path.len() - 1, PathElement::Index(new));
+                if let Some(PathElement::Index(i)) = old_p {
+                    Operator::ListMove(i)
+                } else {
+                    panic!();
+                }
+            }
+            Operator::ObjectInsert(v) => Operator::ObjectDelete(v),
+            Operator::ObjectDelete(v) => Operator::ObjectInsert(v),
+            Operator::ObjectReplace(new_v, old_v) => Operator::ObjectReplace(old_v, new_v),
+        };
+        OperationComponent { path, operator }
+    }
+
+    fn compose(&self, a: Vec<Operation>, b: Vec<Operation>) {
+        todo!()
+    }
+}
+
 #[derive(Clone)]
 pub struct JSON {
     value: Value,
@@ -394,7 +433,7 @@ impl JSON {
     pub fn apply(&mut self, operations: Vec<Operation>) -> Result<()> {
         for operation in operations {
             for op_comp in operation {
-                self.value.apply(op_comp.paths, op_comp.operator)?;
+                self.value.apply(op_comp.path, op_comp.operator)?;
             }
         }
         Ok(())

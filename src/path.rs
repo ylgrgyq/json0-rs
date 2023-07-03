@@ -72,6 +72,18 @@ impl Path {
         }
     }
 
+    pub fn get(&self, index: usize) -> Option<&PathElement> {
+        self.paths.get(index)
+    }
+
+    pub fn replace(&mut self, index: usize, path_elem: PathElement) -> Option<PathElement> {
+        if let Some(o) = self.paths.get(index) {
+            let o = std::mem::replace(&mut self.paths[index], path_elem);
+            return Some(o);
+        }
+        return None;
+    }
+
     pub fn is_empty(&self) -> bool {
         self.paths.is_empty()
     }
