@@ -1,3 +1,4 @@
+use core::prelude::v1;
 use std::{collections::BTreeMap, error, fmt::Display, hash::Hash, hash::Hasher, mem, vec};
 
 use crate::{
@@ -9,7 +10,7 @@ use serde::de::DeserializeOwned;
 use serde_json::{Map, Number, Value};
 
 trait Validation {
-    fn is_valid(&self) -> bool;
+    fn validates(&self) -> Result<()>;
 }
 
 trait Routable {
@@ -111,6 +112,7 @@ impl Routable for Vec<serde_json::Value> {
 
 #[derive(Debug, Clone)]
 enum Operator {
+    Noop(),
     AddNumber(Value),
     ListInsert(Value),
     ListDelete(Value),
@@ -178,6 +180,7 @@ impl Operator {
 
     fn validate_json_object_size(&self, obj: &Map<String, Value>) -> Result<()> {
         let size = match self {
+            Operator::Noop() => 1,
             Operator::AddNumber(_) => 2,
             Operator::ListInsert(_) => 2,
             Operator::ListDelete(_) => 2,
@@ -206,6 +209,20 @@ impl Operator {
     }
 }
 
+impl Validation for Operator {
+    fn validates(&self) -> Result<()> {
+        match self {
+            Operator::AddNumber(v) => match v {
+                Value::Number(n) => Ok(()),
+                _ => Err(JsonError::InvalidOperation(
+                    "Value in AddNumber operator is not a number".into(),
+                )),
+            },
+            _ => Ok(()),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct OperationComponent {
     path: Path,
@@ -230,8 +247,42 @@ impl OperationComponent {
         })
     }
 
-    pub fn get_paths(&self) -> &Path {
+    pub fn get_path(&self) -> &Path {
         &self.path
+    }
+
+    pub fn merge(&mut self, op: &OperationComponent) -> bool {
+        let a = match &self.operator {
+            Operator::Noop() => Some(op.operator.clone()),
+            Operator::AddNumber(v1) => match &op.operator {
+                Operator::AddNumber(v2) => Some(Operator::AddNumber(
+                    serde_json::to_value(v1.as_i64().unwrap() + v2.as_i64().unwrap()).unwrap(),
+                )),
+                _ => None,
+            },
+            Operator::ListInsert(v) => todo!(),
+            Operator::ListDelete(_) => todo!(),
+            Operator::ListReplace(_, _) => todo!(),
+            Operator::ListMove(_) => todo!(),
+            Operator::ObjectInsert(_) => todo!(),
+            Operator::ObjectDelete(_) => todo!(),
+            Operator::ObjectReplace(_, _) => todo!(),
+        };
+        mem::replace(
+            &mut self.operator,
+            Operator::AddNumber(serde_json::to_value(1).unwrap()),
+        );
+        true
+    }
+}
+
+impl Validation for OperationComponent {
+    fn validates(&self) -> Result<()> {
+        if self.get_path().is_empty() {
+            return Err(JsonError::InvalidOperation("Path is empty".into()));
+        }
+
+        self.operator.validates()
     }
 }
 
@@ -377,16 +428,47 @@ impl Appliable for Vec<serde_json::Value> {
 
 pub type Operation = Vec<OperationComponent>;
 
+impl Validation for Vec<OperationComponent> {
+    fn validates(&self) -> Result<()> {
+        for op in self.iter() {
+            op.validates()?;
+        }
+        Ok(())
+    }
+}
+
+impl Validation for Vec<Operation> {
+    fn validates(&self) -> Result<()> {
+        for op in self.iter() {
+            op.validates()?;
+        }
+        Ok(())
+    }
+}
+
 pub struct Transformer {}
 
 impl Transformer {
-    fn append(&self, operations: Vec<Operation>, op: OperationComponent) {
-        todo!()
+    fn append(&self, operations: &mut Operation, op: &OperationComponent) -> Result<()> {
+        if operations.is_empty() {
+            operations.push(op.clone());
+            return Ok(());
+        }
+
+        let last = operations.last_mut().unwrap();
+        if last.get_path().is_match(op.get_path()) && last.merge(op) {
+            return Ok(());
+        }
+        operations.push(op.clone());
+        Ok(())
     }
 
-    fn invert(&self, operation: OperationComponent) -> OperationComponent {
-        let mut path = operation.get_paths().clone();
+    fn invert(&self, operation: OperationComponent) -> Result<OperationComponent> {
+        operation.validates()?;
+
+        let mut path = operation.get_path().clone();
         let operator = match operation.operator {
+            Operator::Noop() => Operator::Noop(),
             Operator::AddNumber(n) => {
                 Operator::AddNumber(serde_json::to_value(-n.as_i64().unwrap()).unwrap())
             }
@@ -398,18 +480,26 @@ impl Transformer {
                 if let Some(PathElement::Index(i)) = old_p {
                     Operator::ListMove(i)
                 } else {
-                    panic!();
+                    return Err(JsonError::BadPath);
                 }
             }
             Operator::ObjectInsert(v) => Operator::ObjectDelete(v),
             Operator::ObjectDelete(v) => Operator::ObjectInsert(v),
             Operator::ObjectReplace(new_v, old_v) => Operator::ObjectReplace(old_v, new_v),
         };
-        OperationComponent { path, operator }
+        Ok(OperationComponent { path, operator })
     }
 
-    fn compose(&self, a: Vec<Operation>, b: Vec<Operation>) {
-        todo!()
+    fn compose(&self, a: Operation, b: Operation) -> Result<Operation> {
+        a.validates()?;
+        b.validates()?;
+
+        let mut ret: Operation = a.clone();
+        for op in b.iter() {
+            self.append(&mut ret, &op)?;
+        }
+
+        Ok(ret)
     }
 }
 

@@ -2,7 +2,7 @@ use serde_json::Value;
 
 use crate::error::{JsonError, Result};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum PathElement {
     Index(usize),
     Key(String),
@@ -82,6 +82,20 @@ impl Path {
             return Some(o);
         }
         return None;
+    }
+
+    pub fn is_match(&self, path: &Path) -> bool {
+        if self.len() != path.len() {
+            return false;
+        }
+
+        for (i, p) in self.paths.iter().enumerate() {
+            if p.eq(path.get(i).unwrap()) {
+                return false;
+            }
+        }
+
+        true
     }
 
     pub fn is_empty(&self) -> bool {
