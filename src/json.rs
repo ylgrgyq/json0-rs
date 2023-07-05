@@ -110,7 +110,7 @@ impl Routable for Vec<serde_json::Value> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 enum Operator {
     Noop(),
     AddNumber(Value),
@@ -252,7 +252,7 @@ impl OperationComponent {
     }
 
     pub fn merge(&mut self, op: &OperationComponent) -> bool {
-        let a = match &self.operator {
+        if let Some(new_operator) = match &self.operator {
             Operator::Noop() => Some(op.operator.clone()),
             Operator::AddNumber(v1) => match &op.operator {
                 Operator::AddNumber(v2) => Some(Operator::AddNumber(
@@ -260,19 +260,87 @@ impl OperationComponent {
                 )),
                 _ => None,
             },
-            Operator::ListInsert(v) => todo!(),
-            Operator::ListDelete(_) => todo!(),
-            Operator::ListReplace(_, _) => todo!(),
+
+            Operator::ListInsert(v1) => match &op.operator {
+                Operator::ListDelete(v2) => {
+                    if v1.eq(v2) {
+                        Some(Operator::Noop())
+                    } else {
+                        None
+                    }
+                }
+                Operator::ListReplace(new_v, old_v) => {
+                    if old_v.eq(v1) {
+                        Some(Operator::ListInsert(new_v.clone()))
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            },
+            Operator::ListReplace(new_v1, old_v1) => match &op.operator {
+                Operator::ListDelete(v2) => {
+                    if new_v1.eq(v2) {
+                        Some(Operator::ListDelete(old_v1.clone()))
+                    } else {
+                        None
+                    }
+                }
+                Operator::ListReplace(new_v2, old_v2) => {
+                    if new_v1.eq(old_v2) {
+                        Some(Operator::ListReplace(new_v2.clone(), old_v1.clone()))
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            },
+            Operator::ObjectInsert(v1) => match &op.operator {
+                Operator::ObjectDelete(v2) => {
+                    if v1.eq(v2) {
+                        Some(Operator::Noop())
+                    } else {
+                        None
+                    }
+                }
+                Operator::ObjectReplace(new_v2, old_v2) => {
+                    if v1.eq(old_v2) {
+                        Some(Operator::ObjectInsert(new_v2.clone()))
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            },
+            Operator::ObjectDelete(v1) => match &op.operator {
+                Operator::ObjectInsert(v2) => Some(Operator::ObjectReplace(v1.clone(), v2.clone())),
+                _ => None,
+            },
+            Operator::ObjectReplace(new_v1, old_v1) => match &op.operator {
+                Operator::ObjectDelete(v2) => {
+                    if new_v1.eq(v2) {
+                        Some(Operator::ObjectDelete(old_v1.clone()))
+                    } else {
+                        None
+                    }
+                }
+                Operator::ObjectReplace(new_v2, old_v2) => {
+                    if new_v1.eq(old_v2) {
+                        Some(Operator::ObjectReplace(new_v2.clone(), old_v1.clone()))
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            },
             Operator::ListMove(_) => todo!(),
-            Operator::ObjectInsert(_) => todo!(),
-            Operator::ObjectDelete(_) => todo!(),
-            Operator::ObjectReplace(_, _) => todo!(),
-        };
-        mem::replace(
-            &mut self.operator,
-            Operator::AddNumber(serde_json::to_value(1).unwrap()),
-        );
-        true
+            _ => None,
+        } {
+            _ = mem::replace(&mut self.operator, new_operator);
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -437,60 +505,58 @@ impl Validation for Vec<OperationComponent> {
     }
 }
 
-impl Validation for Vec<Operation> {
-    fn validates(&self) -> Result<()> {
-        for op in self.iter() {
-            op.validates()?;
-        }
-        Ok(())
-    }
-}
-
 pub struct Transformer {}
 
 impl Transformer {
-    fn append(&self, operations: &mut Operation, op: &OperationComponent) -> Result<()> {
-        if operations.is_empty() {
-            operations.push(op.clone());
+    fn append(&self, operation: &mut Operation, op: &OperationComponent) -> Result<()> {
+        if operation.is_empty() {
+            operation.push(op.clone());
             return Ok(());
         }
 
-        let last = operations.last_mut().unwrap();
+        let last = operation.last_mut().unwrap();
         if last.get_path().is_match(op.get_path()) && last.merge(op) {
+            if last.operator.eq(&Operator::Noop()) {
+                operation.pop();
+            }
             return Ok(());
         }
-        operations.push(op.clone());
+        operation.push(op.clone());
         Ok(())
     }
 
-    fn invert(&self, operation: OperationComponent) -> Result<OperationComponent> {
+    fn invert(&self, operation: &OperationComponent) -> Result<OperationComponent> {
         operation.validates()?;
 
         let mut path = operation.get_path().clone();
-        let operator = match operation.operator {
+        let operator = match &operation.operator {
             Operator::Noop() => Operator::Noop(),
             Operator::AddNumber(n) => {
                 Operator::AddNumber(serde_json::to_value(-n.as_i64().unwrap()).unwrap())
             }
-            Operator::ListInsert(v) => Operator::ListDelete(v),
-            Operator::ListDelete(v) => Operator::ListInsert(v),
-            Operator::ListReplace(new_v, old_v) => Operator::ListReplace(old_v, new_v),
+            Operator::ListInsert(v) => Operator::ListDelete(v.clone()),
+            Operator::ListDelete(v) => Operator::ListInsert(v.clone()),
+            Operator::ListReplace(new_v, old_v) => {
+                Operator::ListReplace(old_v.clone(), new_v.clone())
+            }
             Operator::ListMove(new) => {
-                let old_p = path.replace(path.len() - 1, PathElement::Index(new));
+                let old_p = path.replace(path.len() - 1, PathElement::Index(new.clone()));
                 if let Some(PathElement::Index(i)) = old_p {
                     Operator::ListMove(i)
                 } else {
                     return Err(JsonError::BadPath);
                 }
             }
-            Operator::ObjectInsert(v) => Operator::ObjectDelete(v),
-            Operator::ObjectDelete(v) => Operator::ObjectInsert(v),
-            Operator::ObjectReplace(new_v, old_v) => Operator::ObjectReplace(old_v, new_v),
+            Operator::ObjectInsert(v) => Operator::ObjectDelete(v.clone()),
+            Operator::ObjectDelete(v) => Operator::ObjectInsert(v.clone()),
+            Operator::ObjectReplace(new_v, old_v) => {
+                Operator::ObjectReplace(old_v.clone(), new_v.clone())
+            }
         };
         Ok(OperationComponent { path, operator })
     }
 
-    fn compose(&self, a: Operation, b: Operation) -> Result<Operation> {
+    fn compose(&self, a: &Operation, b: &Operation) -> Result<Operation> {
         a.validates()?;
         b.validates()?;
 
