@@ -14,6 +14,10 @@ pub struct Path {
 }
 
 impl Path {
+    pub fn from_path_elements(paths: Vec<PathElement>) -> Path {
+        Path { paths }
+    }
+
     pub fn from_str(input: &str) -> Result<Path> {
         if let Ok(value) = serde_json::from_str(input) {
             return Path::from_json_value(&value);
@@ -74,6 +78,10 @@ impl Path {
 
     pub fn get(&self, index: usize) -> Option<&PathElement> {
         self.paths.get(index)
+    }
+
+    pub fn get_elements(&self) -> &Vec<PathElement> {
+        &self.paths
     }
 
     pub fn replace(&mut self, index: usize, path_elem: PathElement) -> Option<PathElement> {
