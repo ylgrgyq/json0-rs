@@ -333,14 +333,13 @@ impl OperationComponent {
                 }
                 _ => None,
             },
-            Operator::ListMove(_) => todo!(),
             _ => None,
         } {
             _ = mem::replace(&mut self.operator, new_operator);
-            true
-        } else {
-            false
+            return true;
         }
+
+        false
     }
 }
 
@@ -509,6 +508,19 @@ pub struct Transformer {}
 
 impl Transformer {
     fn append(&self, operation: &mut Operation, op: &OperationComponent) -> Result<()> {
+        op.validates()?;
+
+        if let Operator::ListMove(m) = op.operator {
+            if op
+                .path
+                .get(op.path.len() - 1)
+                .unwrap()
+                .eq(&PathElement::Index(m))
+            {
+                return Ok(());
+            }
+        }
+
         if operation.is_empty() {
             operation.push(op.clone());
             return Ok(());
@@ -558,7 +570,6 @@ impl Transformer {
 
     fn compose(&self, a: &Operation, b: &Operation) -> Result<Operation> {
         a.validates()?;
-        b.validates()?;
 
         let mut ret: Operation = a.clone();
         for op in b.iter() {
