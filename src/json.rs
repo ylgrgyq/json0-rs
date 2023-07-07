@@ -251,6 +251,20 @@ impl OperationComponent {
         &self.path
     }
 
+    pub fn common_path(&self, op: &OperationComponent) -> Path {
+        let mut common_p = vec![];
+        for (i, pa) in self.path.get_elements().iter().enumerate() {
+            if let Some(pb) = op.path.get(i) {
+                if pa.eq(pb) {
+                    common_p.push(pb.clone());
+                    continue;
+                }
+            }
+            break;
+        }
+        Path::from_path_elements(common_p)
+    }
+
     pub fn merge(&mut self, op: &OperationComponent) -> bool {
         if let Some(new_operator) = match &self.operator {
             Operator::Noop() => Some(op.operator.clone()),
@@ -504,9 +518,33 @@ impl Validation for Vec<OperationComponent> {
     }
 }
 
+pub enum TransformSide {
+    LEFT,
+    RIGHT,
+}
 pub struct Transformer {}
 
 impl Transformer {
+    fn transformComponent(
+        &self,
+        base_op: &OperationComponent,
+        new_op: &OperationComponent,
+        side: TransformSide,
+    ) -> Result<OperationComponent> {
+        let new_op = new_op.clone();
+
+        let common_path = base_op.common_path(&new_op);
+        if common_path.is_empty()
+            || (common_path.len() != base_op.get_path().len()
+                && common_path.len() != new_op.get_path().len())
+        {
+            // new_op's path and base_op's path is orthogonal
+            return Ok(new_op);
+        }
+
+        todo!()
+    }
+
     fn append(&self, operation: &mut Operation, op: &OperationComponent) -> Result<()> {
         op.validates()?;
 
