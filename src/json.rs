@@ -253,6 +253,7 @@ impl Validation for Vec<OperationComponent> {
     }
 }
 
+#[derive(PartialEq)]
 pub enum TransformSide {
     LEFT,
     RIGHT,
@@ -268,17 +269,48 @@ impl Transformer {
     ) -> Result<OperationComponent> {
         let mut new_op = new_op.clone();
 
-        let common_path = base_op.get_path().common_path(&new_op.get_path());
+        let common_path = base_op.path.common_path(&new_op.path);
         if common_path.is_empty()
-            || (common_path.len() != base_op.get_path().len()
-                && common_path.len() != new_op.get_path().len())
+            || (common_path.len() != base_op.path.len() && common_path.len() != new_op.path.len())
         {
             // new_op's path and base_op's path is orthogonal
             return Ok(new_op);
         }
 
-        if common_path.len() == base_op.get_path().len() {
+        if common_path.len() == new_op.path.len() {
             new_op.consume(&common_path, &base_op)?;
+        }
+
+        let same_operand =
+            common_path.len() == base_op.path.len() && common_path.len() == new_op.path.len();
+        if same_operand {
+            match base_op.operator {
+                Operator::ListInsert(_) => match new_op.operator {
+                    Operator::ListInsert(_) => {
+                        if side == TransformSide::RIGHT {
+                            let path_elems = new_op.path.get_mut_elements();
+                            if let PathElement::Index(i) =
+                                path_elems.pop().ok_or(JsonError::BadPath)?
+                            {
+                                path_elems.push(PathElement::Index(i + 1))
+                            } else {
+                                return Err(JsonError::BadPath);
+                            }
+                        }
+                    }
+                    Operator::ListDelete(_) => todo!(),
+                    Operator::ListReplace(_, _) => todo!(),
+                    Operator::ListMove(_) => todo!(),
+                    _ => return Ok(new_op),
+                },
+                Operator::ListDelete(_) => todo!(),
+                Operator::ListReplace(_, _) => todo!(),
+                Operator::ListMove(_) => todo!(),
+                Operator::ObjectInsert(_) => todo!(),
+                Operator::ObjectDelete(_) => todo!(),
+                Operator::ObjectReplace(_, _) => todo!(),
+                _ => return Ok(new_op),
+            }
         }
 
         todo!()
@@ -287,12 +319,12 @@ impl Transformer {
     pub fn append(&self, operation: &mut Operation, op: &OperationComponent) -> Result<()> {
         op.validates()?;
 
-        if let Operator::ListMove(m) = op.get_operator() {
+        if let Operator::ListMove(m) = op.operator {
             if op
-                .get_path()
-                .get(op.get_path().len() - 1)
+                .path
+                .get(op.path.len() - 1)
                 .unwrap()
-                .eq(&PathElement::Index(*m))
+                .eq(&PathElement::Index(m))
             {
                 return Ok(());
             }
@@ -304,8 +336,8 @@ impl Transformer {
         }
 
         let last = operation.last_mut().unwrap();
-        if last.get_path().eq(op.get_path()) && last.merge(op) {
-            if last.get_operator().eq(&Operator::Noop()) {
+        if last.path.eq(&op.path) && last.merge(op) {
+            if last.operator.eq(&Operator::Noop()) {
                 operation.pop();
             }
             return Ok(());
@@ -317,8 +349,8 @@ impl Transformer {
     pub fn invert(&self, operation: &OperationComponent) -> Result<OperationComponent> {
         operation.validates()?;
 
-        let mut path = operation.get_path().clone();
-        let operator = match &operation.get_operator() {
+        let mut path = operation.path.clone();
+        let operator = match &operation.operator {
             Operator::Noop() => Operator::Noop(),
             Operator::AddNumber(n) => {
                 Operator::AddNumber(serde_json::to_value(-n.as_i64().unwrap()).unwrap())
@@ -378,7 +410,7 @@ impl JSON {
         for operation in operations {
             for op_comp in operation {
                 self.value
-                    .apply(op_comp.get_path().clone(), op_comp.get_operator().clone())?;
+                    .apply(op_comp.path.clone(), op_comp.operator.clone())?;
             }
         }
         Ok(())

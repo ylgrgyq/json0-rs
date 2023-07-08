@@ -123,8 +123,8 @@ impl Validation for Operator {
 
 #[derive(Clone, Debug)]
 pub struct OperationComponent {
-    path: Path,
-    operator: Operator,
+    pub path: Path,
+    pub operator: Operator,
 }
 
 impl OperationComponent {
@@ -147,14 +147,6 @@ impl OperationComponent {
             path: paths,
             operator,
         })
-    }
-
-    pub fn get_path(&self) -> &Path {
-        &self.path
-    }
-
-    pub fn get_operator(&self) -> &Operator {
-        &self.operator
     }
 
     pub fn merge(&mut self, op: &OperationComponent) -> bool {
@@ -249,31 +241,24 @@ impl OperationComponent {
     }
 
     pub fn consume(&mut self, common_path: &Path, op: &OperationComponent) -> Result<()> {
-        if op.get_path().len() > self.get_path().len()
-            || common_path.len() > self.get_path().len()
-            || common_path.len() > op.get_path().len()
+        if op.path.len() <= self.path.len()
+            || common_path.len() > self.path.len()
+            || common_path.len() > op.path.len()
         {
             return Ok(());
         }
 
-        debug_assert!(self
-            .get_path()
-            .split_at(common_path.len())
-            .0
-            .eq(common_path));
+        debug_assert!(self.path.split_at(common_path.len()).0.eq(common_path));
 
-        if let Some(new_p) = match &mut self.operator {
+        match &mut self.operator {
             Operator::ListDelete(v)
             | Operator::ListReplace(_, v)
             | Operator::ObjectDelete(v)
             | Operator::ObjectReplace(_, v) => {
-                let (p1, p2) = self.path.split_at(common_path.len());
+                let (_, p2) = op.path.split_at(common_path.len());
                 v.apply(p2, op.operator.clone())?;
-                Some(p1)
             }
-            _ => None,
-        } {
-            self.path = new_p;
+            _ => {}
         }
         Ok(())
     }
@@ -281,7 +266,7 @@ impl OperationComponent {
 
 impl Validation for OperationComponent {
     fn validates(&self) -> Result<()> {
-        if self.get_path().is_empty() {
+        if self.path.is_empty() {
             return Err(JsonError::InvalidOperation("Path is empty".into()));
         }
 

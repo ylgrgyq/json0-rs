@@ -80,6 +80,10 @@ impl Path {
         &self.paths
     }
 
+    pub fn get_mut_elements(&mut self) -> &mut Vec<PathElement> {
+        &mut self.paths
+    }
+
     pub fn replace(&mut self, index: usize, path_elem: PathElement) -> Option<PathElement> {
         if let Some(o) = self.paths.get(index) {
             let o = std::mem::replace(&mut self.paths[index], path_elem);
