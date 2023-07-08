@@ -8,16 +8,12 @@ pub enum PathElement {
     Key(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Path {
     paths: Vec<PathElement>,
 }
 
 impl Path {
-    pub fn from_path_elements(paths: Vec<PathElement>) -> Path {
-        Path { paths }
-    }
-
     pub fn from_str(input: &str) -> Result<Path> {
         if let Ok(value) = serde_json::from_str(input) {
             return Path::from_json_value(&value);
@@ -92,18 +88,30 @@ impl Path {
         return None;
     }
 
-    pub fn is_match(&self, path: &Path) -> bool {
-        if self.len() != path.len() {
-            return false;
-        }
+    pub fn split_at(&self, mid: usize) -> (Path, Path) {
+        let (left, right) = self.paths.split_at(mid);
+        (
+            Path {
+                paths: left.to_vec(),
+            },
+            Path {
+                paths: right.to_vec(),
+            },
+        )
+    }
 
-        for (i, p) in self.paths.iter().enumerate() {
-            if p.eq(path.get(i).unwrap()) {
-                return false;
+    pub fn common_path(&self, path: &Path) -> Path {
+        let mut common_p = vec![];
+        for (i, pa) in path.get_elements().iter().enumerate() {
+            if let Some(pb) = path.get(i) {
+                if pa.eq(pb) {
+                    common_p.push(pb.clone());
+                    continue;
+                }
             }
+            break;
         }
-
-        true
+        Path { paths: common_p }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -118,18 +126,6 @@ impl Path {
         Path {
             paths: self.paths[1..].to_vec(),
         }
-    }
-
-    pub fn split_at(&self, mid: usize) -> (Path, Path) {
-        let (left, right) = self.paths.split_at(mid);
-        (
-            Path {
-                paths: left.to_vec(),
-            },
-            Path {
-                paths: right.to_vec(),
-            },
-        )
     }
 }
 

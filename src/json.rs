@@ -1,17 +1,13 @@
-use core::prelude::v1;
-use std::{collections::BTreeMap, error, fmt::Display, hash::Hash, hash::Hasher, mem, vec};
+use std::{fmt::Display, mem};
 
 use crate::{
+    common::Validation,
     error::{JsonError, Result},
+    operation::{Appliable, OperationComponent, Operator},
     path::{Path, PathElement},
 };
-use log::info;
-use serde::de::DeserializeOwned;
-use serde_json::{Map, Number, Value};
 
-trait Validation {
-    fn validates(&self) -> Result<()>;
-}
+use serde_json::Value;
 
 trait Routable {
     fn route_get(&self, paths: &Path) -> Result<Option<&Value>>;
@@ -108,267 +104,6 @@ impl Routable for Vec<serde_json::Value> {
             Ok(None)
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum Operator {
-    Noop(),
-    AddNumber(Value),
-    ListInsert(Value),
-    ListDelete(Value),
-    // Replace value from last value to first value in json array.
-    // First value is the new value.
-    // Last value is the old value.
-    ListReplace(Value, Value),
-    ListMove(usize),
-    ObjectInsert(Value),
-    ObjectDelete(Value),
-    // Replace value from last value to first value in json object.
-    // First value is the new value.
-    // Last value is the old value.
-    ObjectReplace(Value, Value),
-}
-
-impl Operator {
-    fn from_json_value(input: &Value) -> Result<Operator> {
-        match input {
-            Value::Object(obj) => {
-                let operator = Operator::map_to_operator(obj)?;
-                operator.validate_json_object_size(obj)?;
-                Ok(operator)
-            }
-            _ => Err(JsonError::InvalidOperation(
-                "Operator can only be parsed from JSON Object".into(),
-            )),
-        }
-    }
-
-    fn map_to_operator(obj: &Map<String, Value>) -> Result<Operator> {
-        if let Some(na) = obj.get("na") {
-            return Ok(Operator::AddNumber(na.clone()));
-        }
-
-        if let Some(lm) = obj.get("lm") {
-            let i = Operator::value_to_index(lm)?;
-            return Ok(Operator::ListMove(i));
-        }
-
-        if let Some(li) = obj.get("li") {
-            if let Some(ld) = obj.get("ld") {
-                return Ok(Operator::ListReplace(li.clone(), ld.clone()));
-            }
-            return Ok(Operator::ListInsert(li.clone()));
-        }
-
-        if let Some(ld) = obj.get("ld") {
-            return Ok(Operator::ListDelete(ld.clone()));
-        }
-
-        if let Some(oi) = obj.get("oi") {
-            if let Some(od) = obj.get("od") {
-                return Ok(Operator::ObjectReplace(oi.clone(), od.clone()));
-            }
-            return Ok(Operator::ObjectInsert(oi.clone()));
-        }
-
-        if let Some(od) = obj.get("od") {
-            return Ok(Operator::ObjectDelete(od.clone()));
-        }
-
-        Err(JsonError::InvalidOperation("Unknown operator".into()))
-    }
-
-    fn validate_json_object_size(&self, obj: &Map<String, Value>) -> Result<()> {
-        let size = match self {
-            Operator::Noop() => 1,
-            Operator::AddNumber(_) => 2,
-            Operator::ListInsert(_) => 2,
-            Operator::ListDelete(_) => 2,
-            Operator::ListReplace(_, _) => 3,
-            Operator::ListMove(_) => 2,
-            Operator::ObjectInsert(_) => 2,
-            Operator::ObjectDelete(_) => 2,
-            Operator::ObjectReplace(_, _) => 3,
-        };
-        if obj.len() != size {
-            return Err(JsonError::InvalidOperation(
-                "JSON object size bigger than operator required".into(),
-            ));
-        }
-        Ok(())
-    }
-
-    fn value_to_index(val: &Value) -> Result<usize> {
-        if let Some(i) = val.as_u64() {
-            return Ok(i as usize);
-        }
-        return Err(JsonError::InvalidOperation(format!(
-            "{} can not parsed to index",
-            val.to_string()
-        )));
-    }
-}
-
-impl Validation for Operator {
-    fn validates(&self) -> Result<()> {
-        match self {
-            Operator::AddNumber(v) => match v {
-                Value::Number(n) => Ok(()),
-                _ => Err(JsonError::InvalidOperation(
-                    "Value in AddNumber operator is not a number".into(),
-                )),
-            },
-            _ => Ok(()),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct OperationComponent {
-    path: Path,
-    operator: Operator,
-}
-
-impl OperationComponent {
-    pub fn from_str(input: &str) -> Result<OperationComponent> {
-        let json_value: Value = serde_json::from_str(input)?;
-        let path_value = json_value.get("p");
-
-        if path_value.is_none() {
-            return Err(JsonError::InvalidOperation("Missing path".into()));
-        }
-
-        let paths = Path::from_json_value(path_value.unwrap())?;
-        let operator = Operator::from_json_value(&json_value)?;
-
-        Ok(OperationComponent {
-            path: paths,
-            operator,
-        })
-    }
-
-    pub fn get_path(&self) -> &Path {
-        &self.path
-    }
-
-    pub fn common_path(&self, op: &OperationComponent) -> Path {
-        let mut common_p = vec![];
-        for (i, pa) in self.path.get_elements().iter().enumerate() {
-            if let Some(pb) = op.path.get(i) {
-                if pa.eq(pb) {
-                    common_p.push(pb.clone());
-                    continue;
-                }
-            }
-            break;
-        }
-        Path::from_path_elements(common_p)
-    }
-
-    pub fn merge(&mut self, op: &OperationComponent) -> bool {
-        if let Some(new_operator) = match &self.operator {
-            Operator::Noop() => Some(op.operator.clone()),
-            Operator::AddNumber(v1) => match &op.operator {
-                Operator::AddNumber(v2) => Some(Operator::AddNumber(
-                    serde_json::to_value(v1.as_i64().unwrap() + v2.as_i64().unwrap()).unwrap(),
-                )),
-                _ => None,
-            },
-
-            Operator::ListInsert(v1) => match &op.operator {
-                Operator::ListDelete(v2) => {
-                    if v1.eq(v2) {
-                        Some(Operator::Noop())
-                    } else {
-                        None
-                    }
-                }
-                Operator::ListReplace(new_v, old_v) => {
-                    if old_v.eq(v1) {
-                        Some(Operator::ListInsert(new_v.clone()))
-                    } else {
-                        None
-                    }
-                }
-                _ => None,
-            },
-            Operator::ListReplace(new_v1, old_v1) => match &op.operator {
-                Operator::ListDelete(v2) => {
-                    if new_v1.eq(v2) {
-                        Some(Operator::ListDelete(old_v1.clone()))
-                    } else {
-                        None
-                    }
-                }
-                Operator::ListReplace(new_v2, old_v2) => {
-                    if new_v1.eq(old_v2) {
-                        Some(Operator::ListReplace(new_v2.clone(), old_v1.clone()))
-                    } else {
-                        None
-                    }
-                }
-                _ => None,
-            },
-            Operator::ObjectInsert(v1) => match &op.operator {
-                Operator::ObjectDelete(v2) => {
-                    if v1.eq(v2) {
-                        Some(Operator::Noop())
-                    } else {
-                        None
-                    }
-                }
-                Operator::ObjectReplace(new_v2, old_v2) => {
-                    if v1.eq(old_v2) {
-                        Some(Operator::ObjectInsert(new_v2.clone()))
-                    } else {
-                        None
-                    }
-                }
-                _ => None,
-            },
-            Operator::ObjectDelete(v1) => match &op.operator {
-                Operator::ObjectInsert(v2) => Some(Operator::ObjectReplace(v1.clone(), v2.clone())),
-                _ => None,
-            },
-            Operator::ObjectReplace(new_v1, old_v1) => match &op.operator {
-                Operator::ObjectDelete(v2) => {
-                    if new_v1.eq(v2) {
-                        Some(Operator::ObjectDelete(old_v1.clone()))
-                    } else {
-                        None
-                    }
-                }
-                Operator::ObjectReplace(new_v2, old_v2) => {
-                    if new_v1.eq(old_v2) {
-                        Some(Operator::ObjectReplace(new_v2.clone(), old_v1.clone()))
-                    } else {
-                        None
-                    }
-                }
-                _ => None,
-            },
-            _ => None,
-        } {
-            _ = mem::replace(&mut self.operator, new_operator);
-            return true;
-        }
-
-        false
-    }
-}
-
-impl Validation for OperationComponent {
-    fn validates(&self) -> Result<()> {
-        if self.get_path().is_empty() {
-            return Err(JsonError::InvalidOperation("Path is empty".into()));
-        }
-
-        self.operator.validates()
-    }
-}
-
-trait Appliable {
-    fn apply(&mut self, paths: Path, operator: Operator) -> Result<()>;
 }
 
 impl Appliable for Value {
@@ -531,9 +266,9 @@ impl Transformer {
         new_op: &OperationComponent,
         side: TransformSide,
     ) -> Result<OperationComponent> {
-        let new_op = new_op.clone();
+        let mut new_op = new_op.clone();
 
-        let common_path = base_op.common_path(&new_op);
+        let common_path = base_op.get_path().common_path(&new_op.get_path());
         if common_path.is_empty()
             || (common_path.len() != base_op.get_path().len()
                 && common_path.len() != new_op.get_path().len())
@@ -542,18 +277,22 @@ impl Transformer {
             return Ok(new_op);
         }
 
+        if common_path.len() == base_op.get_path().len() {
+            new_op.consume(&common_path, &base_op)?;
+        }
+
         todo!()
     }
 
-    fn append(&self, operation: &mut Operation, op: &OperationComponent) -> Result<()> {
+    pub fn append(&self, operation: &mut Operation, op: &OperationComponent) -> Result<()> {
         op.validates()?;
 
-        if let Operator::ListMove(m) = op.operator {
+        if let Operator::ListMove(m) = op.get_operator() {
             if op
-                .path
-                .get(op.path.len() - 1)
+                .get_path()
+                .get(op.get_path().len() - 1)
                 .unwrap()
-                .eq(&PathElement::Index(m))
+                .eq(&PathElement::Index(*m))
             {
                 return Ok(());
             }
@@ -565,8 +304,8 @@ impl Transformer {
         }
 
         let last = operation.last_mut().unwrap();
-        if last.get_path().is_match(op.get_path()) && last.merge(op) {
-            if last.operator.eq(&Operator::Noop()) {
+        if last.get_path().eq(op.get_path()) && last.merge(op) {
+            if last.get_operator().eq(&Operator::Noop()) {
                 operation.pop();
             }
             return Ok(());
@@ -575,11 +314,11 @@ impl Transformer {
         Ok(())
     }
 
-    fn invert(&self, operation: &OperationComponent) -> Result<OperationComponent> {
+    pub fn invert(&self, operation: &OperationComponent) -> Result<OperationComponent> {
         operation.validates()?;
 
         let mut path = operation.get_path().clone();
-        let operator = match &operation.operator {
+        let operator = match &operation.get_operator() {
             Operator::Noop() => Operator::Noop(),
             Operator::AddNumber(n) => {
                 Operator::AddNumber(serde_json::to_value(-n.as_i64().unwrap()).unwrap())
@@ -603,10 +342,10 @@ impl Transformer {
                 Operator::ObjectReplace(old_v.clone(), new_v.clone())
             }
         };
-        Ok(OperationComponent { path, operator })
+        Ok(OperationComponent::new(path, operator))
     }
 
-    fn compose(&self, a: &Operation, b: &Operation) -> Result<Operation> {
+    pub fn compose(&self, a: &Operation, b: &Operation) -> Result<Operation> {
         a.validates()?;
 
         let mut ret: Operation = a.clone();
@@ -638,7 +377,8 @@ impl JSON {
     pub fn apply(&mut self, operations: Vec<Operation>) -> Result<()> {
         for operation in operations {
             for op_comp in operation {
-                self.value.apply(op_comp.path, op_comp.operator)?;
+                self.value
+                    .apply(op_comp.get_path().clone(), op_comp.get_operator().clone())?;
             }
         }
         Ok(())
