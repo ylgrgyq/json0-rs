@@ -261,7 +261,7 @@ pub enum TransformSide {
 pub struct Transformer {}
 
 impl Transformer {
-    fn transformComponent(
+    fn transform_component(
         &self,
         base_op: &OperationComponent,
         new_op: &OperationComponent,
@@ -269,24 +269,134 @@ impl Transformer {
     ) -> Result<OperationComponent> {
         let mut new_op = new_op.clone();
 
-        let common_path = base_op.path.common_path(&new_op.path);
-        if common_path.is_empty()
-            || (common_path.len() != base_op.path.len() && common_path.len() != new_op.path.len())
+        let base_op_new_op_common = self.transform_operating_path(base_op, &new_op);
+        let new_op_base_op_common = self.transform_operating_path(&new_op, base_op);
+        let mut new_op_len = new_op.path.len();
+        let mut base_op_len = base_op.path.len();
+
+        if let Operator::AddNumber(_) = new_op.operator {
+            new_op_len += 1;
+        }
+
+        if let Operator::AddNumber(_) = base_op.operator {
+            base_op_len += 1;
+        }
+
+        if new_op_base_op_common.is_some()
+            && base_op_len > new_op_len
+            && base_op
+                .path
+                .get(new_op_base_op_common.unwrap())
+                .unwrap()
+                .eq(new_op.path.get(new_op_base_op_common.unwrap()).unwrap())
         {
-            // new_op's path and base_op's path is orthogonal
-            return Ok(new_op);
+            match &mut new_op.operator {
+                Operator::ListDelete(v)
+                | Operator::ListReplace(_, v)
+                | Operator::ObjectDelete(v)
+                | Operator::ObjectReplace(_, v) => {
+                    let (_, p2) = base_op.path.split_at(new_op_len);
+                    v.apply(p2, base_op.operator.clone())?;
+                }
+                _ => {}
+            }
         }
 
-        if common_path.len() == new_op.path.len() {
-            new_op.consume(&common_path, &base_op)?;
-        }
+        if let Some(common) = base_op_new_op_common {
+            let path_length_equal = base_op.path.len() == new_op.path.len();
 
-        let same_operand =
-            common_path.len() == base_op.path.len() && common_path.len() == new_op.path.len();
-        if same_operand {
             match base_op.operator {
                 Operator::ListInsert(_) => match new_op.operator {
                     Operator::ListInsert(_) => {
+                        if path_length_equal
+                            && new_op
+                                .path
+                                .get(common)
+                                .unwrap()
+                                .eq(base_op.path.get(common).unwrap())
+                        {
+                            if side == TransformSide::RIGHT {
+                                let path_elems = new_op.path.get_mut_elements();
+                                if let PathElement::Index(i) =
+                                    path_elems.pop().ok_or(JsonError::BadPath)?
+                                {
+                                    path_elems.push(PathElement::Index(i + 1))
+                                } else {
+                                    return Err(JsonError::BadPath);
+                                }
+                            }
+                        } else if base_op.path.get(common).unwrap()
+                            <= new_op.path.get(common).unwrap()
+                        {
+                            let path_elems = new_op.path.get_mut_elements();
+                            if let PathElement::Index(i) =
+                                path_elems.pop().ok_or(JsonError::BadPath)?
+                            {
+                                path_elems.push(PathElement::Index(i + 1))
+                            } else {
+                                return Err(JsonError::BadPath);
+                            }
+                        }
+                        return Ok(new_op);
+                    }
+                    _ => return Ok(new_op),
+                },
+                Operator::ListDelete(_) => todo!(),
+                Operator::ListReplace(_, _) => todo!(),
+                Operator::ListMove(_) => todo!(),
+                Operator::ObjectInsert(_) => todo!(),
+                Operator::ObjectDelete(_) => todo!(),
+                Operator::ObjectReplace(_, _) => todo!(),
+                _ => return Ok(new_op),
+            }
+        }
+
+        todo!()
+    }
+
+    fn transform_component2(
+        &self,
+        base_op: &OperationComponent,
+        new_op: &OperationComponent,
+        side: TransformSide,
+    ) -> Result<OperationComponent> {
+        let mut new_op = new_op.clone();
+
+        let max_common_path = base_op.path.max_common_path(&new_op.path);
+        if max_common_path.is_empty() {
+            // new_op and base_op does not have common path
+            return Ok(new_op);
+        }
+
+        // [1,2,3], [1,2,5] max_common_path + 1 = op path len
+        // [1,2,3], [1,2,5,8]
+        // [1,2,3], [1,2,3,5] max_common_path == op path len
+        // [1,2,3], [1,2,5,8]
+        // [1,2,3,7,8], [1,2,1]
+        // [1,2,3,7,8], [1,2,3]
+        let new_operate_path = new_op.operate_path();
+        let base_operate_path = base_op.operate_path();
+        if max_common_path.len() < new_operate_path.len()
+            && max_common_path.len() < base_operate_path.len()
+        {
+            // common path must be equal to new_op's or base_op's operate path
+            // or base_op and new_op is operating on orthogonal value
+            // they don't need transform
+            return Ok(new_op);
+        }
+
+        // if base_op's path is longger and contains new_op's path, new_op should include base_op's effect
+        if base_operate_path.len() >= new_operate_path.len() && max_common_path.len() == new_op.path.len() {
+            new_op.consume(&max_common_path, &base_op)?;
+        }
+
+
+
+        let same_operand = new_operate_path.len() == base_operate_path.len();
+        match base_op.operator {
+            Operator::ListInsert(_) => match new_op.operator {
+                Operator::ListInsert(_) => {
+                    if same_operand && max_common_path.len() == {
                         if side == TransformSide::RIGHT {
                             let path_elems = new_op.path.get_mut_elements();
                             if let PathElement::Index(i) =
@@ -298,19 +408,19 @@ impl Transformer {
                             }
                         }
                     }
-                    Operator::ListDelete(_) => todo!(),
-                    Operator::ListReplace(_, _) => todo!(),
-                    Operator::ListMove(_) => todo!(),
-                    _ => return Ok(new_op),
-                },
+                }
                 Operator::ListDelete(_) => todo!(),
                 Operator::ListReplace(_, _) => todo!(),
                 Operator::ListMove(_) => todo!(),
-                Operator::ObjectInsert(_) => todo!(),
-                Operator::ObjectDelete(_) => todo!(),
-                Operator::ObjectReplace(_, _) => todo!(),
                 _ => return Ok(new_op),
-            }
+            },
+            Operator::ListDelete(_) => todo!(),
+            Operator::ListReplace(_, _) => todo!(),
+            Operator::ListMove(_) => todo!(),
+            Operator::ObjectInsert(_) => todo!(),
+            Operator::ObjectDelete(_) => todo!(),
+            Operator::ObjectReplace(_, _) => todo!(),
+            _ => return Ok(new_op),
         }
 
         todo!()
@@ -386,6 +496,41 @@ impl Transformer {
         }
 
         Ok(ret)
+    }
+
+    fn transform_operating_path(
+        &self,
+        a: &OperationComponent,
+        b: &OperationComponent,
+    ) -> Option<usize> {
+        let mut alen = a.path.len();
+        let mut blen = b.path.len();
+        if let Operator::AddNumber(_) = a.operator {
+            alen += 1;
+        }
+
+        if let Operator::AddNumber(_) = b.operator {
+            blen += 1;
+        }
+
+        if alen == 0 {
+            return Some(0);
+        }
+
+        if blen == 0 {
+            return None;
+        }
+
+        for (i, p) in a.path.get_elements().iter().enumerate() {
+            if let Some(pb) = b.path.get(i) {
+                if !p.eq(pb) {
+                    return None;
+                }
+            } else {
+                return None;
+            }
+        }
+        Some(alen)
     }
 }
 

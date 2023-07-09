@@ -241,15 +241,6 @@ impl OperationComponent {
     }
 
     pub fn consume(&mut self, common_path: &Path, op: &OperationComponent) -> Result<()> {
-        if op.path.len() <= self.path.len()
-            || common_path.len() > self.path.len()
-            || common_path.len() > op.path.len()
-        {
-            return Ok(());
-        }
-
-        debug_assert!(self.path.split_at(common_path.len()).0.eq(common_path));
-
         match &mut self.operator {
             Operator::ListDelete(v)
             | Operator::ListReplace(_, v)
@@ -261,6 +252,30 @@ impl OperationComponent {
             _ => {}
         }
         Ok(())
+    }
+
+    pub fn operate_path(&self) -> Path {
+        if let Operator::AddNumber(_) = self.operator {
+            self.path.clone()
+        } else {
+            let mut p = self.path.clone();
+            p.get_mut_elements().pop();
+            p
+        }
+    }
+
+    pub fn check_may_conflict_by_path(&self, common_path: &Path, op: &OperationComponent) -> bool {
+        let mut self_operate_path_len = self.path.len() - 1;
+        if let Operator::AddNumber(_) = self.operator {
+            self_operate_path_len += 1;
+        }
+
+        let mut op_operate_path_len = op.path.len() - 1;
+        if let Operator::AddNumber(_) = op.operator {
+            op_operate_path_len += 1;
+        }
+
+        common_path.len() >= self_operate_path_len || common_path.len() >= op_operate_path_len
     }
 }
 

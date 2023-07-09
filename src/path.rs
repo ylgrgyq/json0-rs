@@ -8,6 +8,19 @@ pub enum PathElement {
     Key(String),
 }
 
+impl PartialOrd for PathElement {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match self {
+            // only index can compare
+            PathElement::Index(a) => match other {
+                PathElement::Index(b) => a.partial_cmp(b),
+                PathElement::Key(_) => None,
+            },
+            PathElement::Key(_) => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Path {
     paths: Vec<PathElement>,
@@ -104,7 +117,21 @@ impl Path {
         )
     }
 
-    pub fn common_path(&self, path: &Path) -> Path {
+    pub fn max_common_path(&self, path: &Path) -> Path {
+        let mut common_p = vec![];
+        for (i, pa) in path.get_elements().iter().enumerate() {
+            if let Some(pb) = path.get(i) {
+                if pa.eq(pb) {
+                    common_p.push(pb.clone());
+                    continue;
+                }
+            }
+            break;
+        }
+        Path { paths: common_p }
+    }
+
+    pub fn common_path_prefix(&self, path: &Path) -> Path {
         let mut common_p = vec![];
         for (i, pa) in path.get_elements().iter().enumerate() {
             if let Some(pb) = path.get(i) {
