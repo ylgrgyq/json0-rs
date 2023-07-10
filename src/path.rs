@@ -97,6 +97,10 @@ impl Path {
         &mut self.paths
     }
 
+    pub fn last(&self) -> Option<&PathElement> {
+        self.get(self.len() - 1)
+    }
+
     pub fn replace(&mut self, index: usize, path_elem: PathElement) -> Option<PathElement> {
         if let Some(o) = self.paths.get(index) {
             let o = std::mem::replace(&mut self.paths[index], path_elem);

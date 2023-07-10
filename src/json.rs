@@ -371,7 +371,6 @@ impl Transformer {
         // [1,2,3], [1,2,5] max_common_path + 1 = op path len
         // [1,2,3], [1,2,5,8]
         // [1,2,3], [1,2,3,5] max_common_path == op path len
-        // [1,2,3], [1,2,5,8]
         // [1,2,3,7,8], [1,2,1]
         // [1,2,3,7,8], [1,2,3]
         let new_operate_path = new_op.operate_path();
@@ -385,18 +384,24 @@ impl Transformer {
             return Ok(new_op);
         }
 
-        // if base_op's path is longger and contains new_op's path, new_op should include base_op's effect
-        if base_operate_path.len() >= new_operate_path.len() && max_common_path.len() == new_op.path.len() {
-            new_op.consume(&max_common_path, &base_op)?;
+        if base_operate_path.len() > new_operate_path.len() {
+            // if base_op's path is longger and contains new_op's path, new_op should include base_op's effect
+            if max_common_path.len() == new_op.path.len() {
+                new_op.consume(&max_common_path, &base_op)?;
+            }
+            // new_op, base_op
+            // {a: [1,[1,2,3]]}
+            // [a,1,1], li, [a,1,3], ld
+            // [1,2,3,7,8], [1,2,3]
+            return Ok(new_op);
         }
 
-
-
+        // from here, new_op's path is shorter or equal to base_op
         let same_operand = new_operate_path.len() == base_operate_path.len();
         match base_op.operator {
             Operator::ListInsert(_) => match new_op.operator {
                 Operator::ListInsert(_) => {
-                    if same_operand && max_common_path.len() == {
+                    if same_operand && max_common_path.len() == new_op.path.len() {
                         if side == TransformSide::RIGHT {
                             let path_elems = new_op.path.get_mut_elements();
                             if let PathElement::Index(i) =
@@ -407,10 +412,35 @@ impl Transformer {
                                 return Err(JsonError::BadPath);
                             }
                         }
+                    } else if base_op.path.last().unwrap() <= new_op.path.last().unwrap() {
+                        let path_elems = new_op.path.get_mut_elements();
+                        if let PathElement::Index(i) = path_elems.pop().ok_or(JsonError::BadPath)? {
+                            path_elems.push(PathElement::Index(i + 1))
+                        } else {
+                            return Err(JsonError::BadPath);
+                        }
                     }
                 }
-                Operator::ListDelete(_) => todo!(),
-                Operator::ListReplace(_, _) => todo!(),
+                Operator::ListDelete(_) => {
+                    if base_op.path.last().unwrap() <= new_op.path.last().unwrap() {
+                        let path_elems = new_op.path.get_mut_elements();
+                        if let PathElement::Index(i) = path_elems.pop().ok_or(JsonError::BadPath)? {
+                            path_elems.push(PathElement::Index(i + 1))
+                        } else {
+                            return Err(JsonError::BadPath);
+                        }
+                    }
+                }
+                Operator::ListReplace(_, _) => {
+                    if base_op.path.last().unwrap() <= new_op.path.last().unwrap() {
+                        let path_elems = new_op.path.get_mut_elements();
+                        if let PathElement::Index(i) = path_elems.pop().ok_or(JsonError::BadPath)? {
+                            path_elems.push(PathElement::Index(i + 1))
+                        } else {
+                            return Err(JsonError::BadPath);
+                        }
+                    }
+                }
                 Operator::ListMove(_) => todo!(),
                 _ => return Ok(new_op),
             },
@@ -423,7 +453,7 @@ impl Transformer {
             _ => return Ok(new_op),
         }
 
-        todo!()
+        Ok(new_op)
     }
 
     pub fn append(&self, operation: &mut Operation, op: &OperationComponent) -> Result<()> {
