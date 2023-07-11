@@ -391,66 +391,113 @@ impl Transformer {
             }
             // new_op, base_op
             // {a: [1,[1,2,3]]}
+            // [1,2,3], [1,2,4,5]
+            // [1,2,3], [1,2,4]
             // [a,1,1], li, [a,1,3], ld
             // [1,2,3,7,8], [1,2,3]
             return Ok(new_op);
         }
 
-        // from here, new_op's path is shorter or equal to base_op
+        // from here, base_op's path is shorter or equal to new_op
+        // base_op, new_op
+        // [p1,p2,p3], [p1,p2,p3] both number or new_op is number
+        // [p1,p2,p3], [p1,p2,p3] non number
+        // [p1,p2,p3], [p1,p2,p3,p4] non number
         let same_operand = new_operate_path.len() == base_operate_path.len();
-        match base_op.operator {
+        match &base_op.operator {
+            Operator::ListReplace(li_v, _) => {
+                if new_op.path.get(new_operate_path.len()).unwrap()
+                    == base_op.path.get(new_operate_path.len()).unwrap()
+                {
+                    if !same_operand {
+                        return Ok(new_op.noop());
+                    } else {
+                        match &new_op.operator {
+                            Operator::ListDelete(_) => {
+                                return Ok(new_op.noop());
+                            }
+                            Operator::ListReplace(new_li, _) => {
+                                if side == TransformSide::LEFT {
+                                    return Ok(OperationComponent::new(
+                                        new_op.path.clone(),
+                                        Operator::ListReplace(new_li.clone(), li_v.clone()),
+                                    ));
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
             Operator::ListInsert(_) => match new_op.operator {
                 Operator::ListInsert(_) => {
                     if same_operand && max_common_path.len() == new_op.path.len() {
                         if side == TransformSide::RIGHT {
-                            let path_elems = new_op.path.get_mut_elements();
-                            if let PathElement::Index(i) =
-                                path_elems.pop().ok_or(JsonError::BadPath)?
-                            {
-                                path_elems.push(PathElement::Index(i + 1))
-                            } else {
-                                return Err(JsonError::BadPath);
-                            }
+                            new_op.increase_last_index_path();
                         }
                     } else if base_op.path.last().unwrap() <= new_op.path.last().unwrap() {
-                        let path_elems = new_op.path.get_mut_elements();
-                        if let PathElement::Index(i) = path_elems.pop().ok_or(JsonError::BadPath)? {
-                            path_elems.push(PathElement::Index(i + 1))
-                        } else {
-                            return Err(JsonError::BadPath);
+                        new_op.increase_last_index_path();
+                    }
+                }
+                Operator::ListDelete(_) | Operator::ListReplace(_, _) => {
+                    if same_operand && base_op.path.last().unwrap() <= new_op.path.last().unwrap() {
+                        new_op.increase_last_index_path();
+                    }
+                }
+                Operator::ListMove(i) => {
+                    if let PathElement::Index(base_i) = base_op.path.last().unwrap() {
+                        if same_operand && base_i <= &i {
+                            new_op.operator = Operator::ListMove(i + 1);
                         }
                     }
                 }
-                Operator::ListDelete(_) => {
-                    if base_op.path.last().unwrap() <= new_op.path.last().unwrap() {
-                        let path_elems = new_op.path.get_mut_elements();
-                        if let PathElement::Index(i) = path_elems.pop().ok_or(JsonError::BadPath)? {
-                            path_elems.push(PathElement::Index(i + 1))
-                        } else {
-                            return Err(JsonError::BadPath);
-                        }
-                    }
-                }
-                Operator::ListReplace(_, _) => {
-                    if base_op.path.last().unwrap() <= new_op.path.last().unwrap() {
-                        let path_elems = new_op.path.get_mut_elements();
-                        if let PathElement::Index(i) = path_elems.pop().ok_or(JsonError::BadPath)? {
-                            path_elems.push(PathElement::Index(i + 1))
-                        } else {
-                            return Err(JsonError::BadPath);
-                        }
-                    }
-                }
-                Operator::ListMove(_) => todo!(),
-                _ => return Ok(new_op),
+                _ => {}
             },
-            Operator::ListDelete(_) => todo!(),
-            Operator::ListReplace(_, _) => todo!(),
-            Operator::ListMove(_) => todo!(),
+            Operator::ListDelete(_) => {
+                if let Operator::ListMove(lm) = new_op.operator {
+                    if same_operand {
+                        if new_op.path.get(new_operate_path.len()).unwrap()
+                            == base_op.path.get(new_operate_path.len()).unwrap()
+                        {
+                            return Ok(new_op.noop());
+                        }
+                        let p = base_op.path.get(new_operate_path.len()).unwrap();
+                        let from = new_op.path.get(new_operate_path.len()).unwrap();
+                        let to = lm.into();
+                        if p < &to || (p.eq(&to) && from < &to) {
+                            new_op.operator = Operator::ListMove(lm - 1);
+                        }
+                    }
+                }
+
+                if base_op.path.get(new_operate_path.len()).unwrap()
+                    < new_op.path.get(new_operate_path.len()).unwrap()
+                {
+                    new_op.decrease_last_index_path();
+                } else if base_op.path.get(new_operate_path.len()).unwrap()
+                    == new_op.path.get(new_operate_path.len()).unwrap()
+                {
+                    return Ok(new_op.noop());
+                } else {
+                    match &new_op.operator {
+                        Operator::ListDelete(_) => {
+                            return Ok(new_op.noop());
+                        }
+                        Operator::ListReplace(li, _) => {
+                            return Ok(OperationComponent::new(
+                                new_op.path.clone(),
+                                Operator::ListInsert(li.clone()),
+                            ));
+                        }
+                        _ => {}
+                    }
+                }
+            }
             Operator::ObjectInsert(_) => todo!(),
             Operator::ObjectDelete(_) => todo!(),
             Operator::ObjectReplace(_, _) => todo!(),
-            _ => return Ok(new_op),
+            Operator::ListMove(_) => todo!(),
+            _ => {}
         }
 
         Ok(new_op)

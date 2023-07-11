@@ -21,6 +21,18 @@ impl PartialOrd for PathElement {
     }
 }
 
+impl From<usize> for PathElement {
+    fn from(i: usize) -> Self {
+        PathElement::Index(i)
+    }
+}
+
+impl From<String> for PathElement {
+    fn from(k: String) -> Self {
+        PathElement::Key(k)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Path {
     paths: Vec<PathElement>,

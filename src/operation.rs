@@ -2,7 +2,12 @@ use std::mem;
 
 use serde_json::{Map, Value};
 
-use crate::{common::Validation, error::JsonError, error::Result, path::Path};
+use crate::{
+    common::Validation,
+    error::JsonError,
+    error::Result,
+    path::{Path, PathElement},
+};
 
 pub trait Appliable {
     fn apply(&mut self, paths: Path, operator: Operator) -> Result<()>;
@@ -149,6 +154,13 @@ impl OperationComponent {
         })
     }
 
+    pub fn noop(&self) -> OperationComponent {
+        OperationComponent {
+            path: self.path.clone(),
+            operator: Operator::Noop(),
+        }
+    }
+
     pub fn merge(&mut self, op: &OperationComponent) -> bool {
         if let Some(new_operator) = match &self.operator {
             Operator::Noop() => Some(op.operator.clone()),
@@ -261,6 +273,24 @@ impl OperationComponent {
             let mut p = self.path.clone();
             p.get_mut_elements().pop();
             p
+        }
+    }
+
+    pub fn increase_last_index_path(&mut self) {
+        let path_elems = self.path.get_mut_elements();
+        if let Some(last_p) = path_elems.pop() {
+            if let PathElement::Index(i) = last_p {
+                path_elems.push(PathElement::Index(i + 1))
+            }
+        }
+    }
+
+    pub fn decrease_last_index_path(&mut self) {
+        let path_elems = self.path.get_mut_elements();
+        if let Some(last_p) = path_elems.pop() {
+            if let PathElement::Index(i) = last_p {
+                path_elems.push(PathElement::Index(i - 1))
+            }
         }
     }
 
