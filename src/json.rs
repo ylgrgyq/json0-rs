@@ -493,9 +493,35 @@ impl Transformer {
                     }
                 }
             }
+            Operator::ObjectReplace(oi, _) => {
+                if base_op
+                    .path
+                    .get(new_operate_path.len())
+                    .unwrap()
+                    .eq(new_op.path.get(new_operate_path.len()).unwrap())
+                {
+                    if !same_operand {
+                        return Ok(new_op.noop());
+                    }
+
+                    match &new_op.operator {
+                        Operator::ObjectReplace(new_oi, _) | Operator::ObjectInsert(new_oi) => {
+                            if side == TransformSide::RIGHT {
+                                return Ok(new_op.noop());
+                            }
+                            return Ok(OperationComponent {
+                                path: new_op.path.clone(),
+                                operator: Operator::ListReplace(new_oi.clone(), oi.clone()),
+                            });
+                        }
+                        _ => {
+                            return Ok(new_op.noop());
+                        }
+                    }
+                }
+            }
             Operator::ObjectInsert(_) => todo!(),
             Operator::ObjectDelete(_) => todo!(),
-            Operator::ObjectReplace(_, _) => todo!(),
             Operator::ListMove(_) => todo!(),
             _ => {}
         }
