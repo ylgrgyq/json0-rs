@@ -1,4 +1,4 @@
-use std::{fmt::Display, mem};
+use std::{fmt::Display, mem, vec};
 
 use crate::{
     common::Validation,
@@ -261,103 +261,120 @@ pub enum TransformSide {
 pub struct Transformer {}
 
 impl Transformer {
-    fn transform_component(
+    pub fn transform(
         &self,
-        base_op: &OperationComponent,
-        new_op: &OperationComponent,
+        operation: &Operation,
+        base_operation: &Operation,
         side: TransformSide,
-    ) -> Result<OperationComponent> {
-        let mut new_op = new_op.clone();
-
-        let base_op_new_op_common = self.transform_operating_path(base_op, &new_op);
-        let new_op_base_op_common = self.transform_operating_path(&new_op, base_op);
-        let mut new_op_len = new_op.path.len();
-        let mut base_op_len = base_op.path.len();
-
-        if let Operator::AddNumber(_) = new_op.operator {
-            new_op_len += 1;
+    ) -> Result<Operation> {
+        if base_operation.is_empty() {
+            return Ok(operation.clone());
         }
 
-        if let Operator::AddNumber(_) = base_op.operator {
-            base_op_len += 1;
+        operation.validates()?;
+        base_operation.validates()?;
+
+        if operation.len() == 1 && base_operation.len() == 1 {
+            let o = self.transform_component(
+                operation.get(0).unwrap(),
+                base_operation.get(0).unwrap(),
+                side,
+            )?;
+            return Ok(vec![o]);
         }
 
-        if new_op_base_op_common.is_some()
-            && base_op_len > new_op_len
-            && base_op
+        if side == TransformSide::LEFT {
+            Ok(self.do_transform(operation, base_operation, side)?.0)
+        } else {
+            Ok(self.do_transform(operation, base_operation, side)?.1)
+        }
+    }
+
+    pub fn append(&self, operation: &mut Operation, op: &OperationComponent) -> Result<()> {
+        op.validates()?;
+
+        if let Operator::ListMove(m) = op.operator {
+            if op
                 .path
-                .get(new_op_base_op_common.unwrap())
+                .get(op.path.len() - 1)
                 .unwrap()
-                .eq(new_op.path.get(new_op_base_op_common.unwrap()).unwrap())
-        {
-            match &mut new_op.operator {
-                Operator::ListDelete(v)
-                | Operator::ListReplace(_, v)
-                | Operator::ObjectDelete(v)
-                | Operator::ObjectReplace(_, v) => {
-                    let (_, p2) = base_op.path.split_at(new_op_len);
-                    v.apply(p2, base_op.operator.clone())?;
+                .eq(&PathElement::Index(m))
+            {
+                return Ok(());
+            }
+        }
+
+        if operation.is_empty() {
+            operation.push(op.clone());
+            return Ok(());
+        }
+
+        let last = operation.last_mut().unwrap();
+        if last.path.eq(&op.path) && last.merge(op) {
+            if last.operator.eq(&Operator::Noop()) {
+                operation.pop();
+            }
+            return Ok(());
+        }
+        operation.push(op.clone());
+        Ok(())
+    }
+
+    pub fn invert(&self, operation: &OperationComponent) -> Result<OperationComponent> {
+        operation.validates()?;
+
+        let mut path = operation.path.clone();
+        let operator = match &operation.operator {
+            Operator::Noop() => Operator::Noop(),
+            Operator::AddNumber(n) => {
+                Operator::AddNumber(serde_json::to_value(-n.as_i64().unwrap()).unwrap())
+            }
+            Operator::ListInsert(v) => Operator::ListDelete(v.clone()),
+            Operator::ListDelete(v) => Operator::ListInsert(v.clone()),
+            Operator::ListReplace(new_v, old_v) => {
+                Operator::ListReplace(old_v.clone(), new_v.clone())
+            }
+            Operator::ListMove(new) => {
+                let old_p = path.replace(path.len() - 1, PathElement::Index(new.clone()));
+                if let Some(PathElement::Index(i)) = old_p {
+                    Operator::ListMove(i)
+                } else {
+                    return Err(JsonError::BadPath);
                 }
-                _ => {}
             }
+            Operator::ObjectInsert(v) => Operator::ObjectDelete(v.clone()),
+            Operator::ObjectDelete(v) => Operator::ObjectInsert(v.clone()),
+            Operator::ObjectReplace(new_v, old_v) => {
+                Operator::ObjectReplace(old_v.clone(), new_v.clone())
+            }
+        };
+        Ok(OperationComponent::new(path, operator))
+    }
+
+    pub fn compose(&self, a: &Operation, b: &Operation) -> Result<Operation> {
+        a.validates()?;
+
+        let mut ret: Operation = a.clone();
+        for op in b.iter() {
+            self.append(&mut ret, &op)?;
         }
 
-        if let Some(common) = base_op_new_op_common {
-            let path_length_equal = base_op.path.len() == new_op.path.len();
+        Ok(ret)
+    }
 
-            match base_op.operator {
-                Operator::ListInsert(_) => match new_op.operator {
-                    Operator::ListInsert(_) => {
-                        if path_length_equal
-                            && new_op
-                                .path
-                                .get(common)
-                                .unwrap()
-                                .eq(base_op.path.get(common).unwrap())
-                        {
-                            if side == TransformSide::RIGHT {
-                                let path_elems = new_op.path.get_mut_elements();
-                                if let PathElement::Index(i) =
-                                    path_elems.pop().ok_or(JsonError::BadPath)?
-                                {
-                                    path_elems.push(PathElement::Index(i + 1))
-                                } else {
-                                    return Err(JsonError::BadPath);
-                                }
-                            }
-                        } else if base_op.path.get(common).unwrap()
-                            <= new_op.path.get(common).unwrap()
-                        {
-                            let path_elems = new_op.path.get_mut_elements();
-                            if let PathElement::Index(i) =
-                                path_elems.pop().ok_or(JsonError::BadPath)?
-                            {
-                                path_elems.push(PathElement::Index(i + 1))
-                            } else {
-                                return Err(JsonError::BadPath);
-                            }
-                        }
-                        return Ok(new_op);
-                    }
-                    _ => return Ok(new_op),
-                },
-                Operator::ListDelete(_) => todo!(),
-                Operator::ListReplace(_, _) => todo!(),
-                Operator::ListMove(_) => todo!(),
-                Operator::ObjectInsert(_) => todo!(),
-                Operator::ObjectDelete(_) => todo!(),
-                Operator::ObjectReplace(_, _) => todo!(),
-                _ => return Ok(new_op),
-            }
-        }
-
+    fn do_transform(
+        &self,
+        operation: &Operation,
+        base_operation: &Operation,
+        side: TransformSide,
+    ) -> Result<(Operation, Operation)> {
         todo!()
     }
 
-    fn transform_component2(
+    fn transform_component(
         &self,
-        base_op: &OperationComponent,
         new_op: &OperationComponent,
+        base_op: &OperationComponent,
         side: TransformSide,
     ) -> Result<OperationComponent> {
         let mut new_op = new_op.clone();
@@ -621,113 +638,6 @@ impl Transformer {
         }
 
         Ok(new_op)
-    }
-
-    pub fn append(&self, operation: &mut Operation, op: &OperationComponent) -> Result<()> {
-        op.validates()?;
-
-        if let Operator::ListMove(m) = op.operator {
-            if op
-                .path
-                .get(op.path.len() - 1)
-                .unwrap()
-                .eq(&PathElement::Index(m))
-            {
-                return Ok(());
-            }
-        }
-
-        if operation.is_empty() {
-            operation.push(op.clone());
-            return Ok(());
-        }
-
-        let last = operation.last_mut().unwrap();
-        if last.path.eq(&op.path) && last.merge(op) {
-            if last.operator.eq(&Operator::Noop()) {
-                operation.pop();
-            }
-            return Ok(());
-        }
-        operation.push(op.clone());
-        Ok(())
-    }
-
-    pub fn invert(&self, operation: &OperationComponent) -> Result<OperationComponent> {
-        operation.validates()?;
-
-        let mut path = operation.path.clone();
-        let operator = match &operation.operator {
-            Operator::Noop() => Operator::Noop(),
-            Operator::AddNumber(n) => {
-                Operator::AddNumber(serde_json::to_value(-n.as_i64().unwrap()).unwrap())
-            }
-            Operator::ListInsert(v) => Operator::ListDelete(v.clone()),
-            Operator::ListDelete(v) => Operator::ListInsert(v.clone()),
-            Operator::ListReplace(new_v, old_v) => {
-                Operator::ListReplace(old_v.clone(), new_v.clone())
-            }
-            Operator::ListMove(new) => {
-                let old_p = path.replace(path.len() - 1, PathElement::Index(new.clone()));
-                if let Some(PathElement::Index(i)) = old_p {
-                    Operator::ListMove(i)
-                } else {
-                    return Err(JsonError::BadPath);
-                }
-            }
-            Operator::ObjectInsert(v) => Operator::ObjectDelete(v.clone()),
-            Operator::ObjectDelete(v) => Operator::ObjectInsert(v.clone()),
-            Operator::ObjectReplace(new_v, old_v) => {
-                Operator::ObjectReplace(old_v.clone(), new_v.clone())
-            }
-        };
-        Ok(OperationComponent::new(path, operator))
-    }
-
-    pub fn compose(&self, a: &Operation, b: &Operation) -> Result<Operation> {
-        a.validates()?;
-
-        let mut ret: Operation = a.clone();
-        for op in b.iter() {
-            self.append(&mut ret, &op)?;
-        }
-
-        Ok(ret)
-    }
-
-    fn transform_operating_path(
-        &self,
-        a: &OperationComponent,
-        b: &OperationComponent,
-    ) -> Option<usize> {
-        let mut alen = a.path.len();
-        let mut blen = b.path.len();
-        if let Operator::AddNumber(_) = a.operator {
-            alen += 1;
-        }
-
-        if let Operator::AddNumber(_) = b.operator {
-            blen += 1;
-        }
-
-        if alen == 0 {
-            return Some(0);
-        }
-
-        if blen == 0 {
-            return None;
-        }
-
-        for (i, p) in a.path.get_elements().iter().enumerate() {
-            if let Some(pb) = b.path.get(i) {
-                if !p.eq(pb) {
-                    return None;
-                }
-            } else {
-                return None;
-            }
-        }
-        Some(alen)
     }
 }
 
