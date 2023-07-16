@@ -434,52 +434,45 @@ impl Transformer {
                 }
             }
             Operator::ListDelete(_) => {
+                let base_op_operate_path = base_op.path.get(new_operate_path.len()).unwrap();
+                let new_op_operate_path = new_op.path.get(new_operate_path.len()).unwrap();
                 if let Operator::ListMove(lm) = new_op.operator {
                     if same_operand {
-                        if new_op.path.get(new_operate_path.len()).unwrap()
-                            == base_op.path.get(new_operate_path.len()).unwrap()
-                        {
+                        if base_op_is_prefix {
+                            // base_op deleted the thing we're trying to move
                             return Ok(new_op.noop());
                         }
-                        let p = base_op.path.get(new_operate_path.len()).unwrap();
-                        let from = new_op.path.get(new_operate_path.len()).unwrap();
                         let to = lm.into();
-                        if p < &to || (p.eq(&to) && from < &to) {
+                        if base_op_operate_path < &to
+                            || (base_op_operate_path.eq(&to) && new_op_operate_path < &to)
+                        {
                             new_op.operator = Operator::ListMove(lm - 1);
                         }
                     }
                 }
 
-                if base_op.path.get(new_operate_path.len()).unwrap()
-                    < new_op.path.get(new_operate_path.len()).unwrap()
-                {
+                if base_op_operate_path < new_op_operate_path {
                     new_op.decrease_last_index_path();
-                } else if base_op.path.get(new_operate_path.len()).unwrap()
-                    == new_op.path.get(new_operate_path.len()).unwrap()
-                {
-                    return Ok(new_op.noop());
-                } else {
-                    match &new_op.operator {
-                        Operator::ListDelete(_) => {
-                            return Ok(new_op.noop());
-                        }
-                        Operator::ListReplace(li, _) => {
-                            return Ok(OperationComponent::new(
-                                new_op.path.clone(),
-                                Operator::ListInsert(li.clone()),
-                            ));
-                        }
-                        _ => {}
+                } else if base_op_is_prefix {
+                    if !same_operand {
+                        // we're below the deleted element, so -> noop
+                        return Ok(new_op.noop());
+                    }
+                    if let Operator::ListDelete(_) = new_op.operator {
+                        // we're trying to delete the same element, -> noop
+                        return Ok(new_op.noop());
+                    }
+                    if let Operator::ListReplace(li, _) = new_op.operator {
+                        // we're replacing, they're deleting. we become an insert.
+                        return Ok(OperationComponent::new(
+                            new_op.path.clone(),
+                            Operator::ListInsert(li.clone()),
+                        ));
                     }
                 }
             }
             Operator::ObjectReplace(oi, _) => {
-                if base_op
-                    .path
-                    .get(new_operate_path.len())
-                    .unwrap()
-                    .eq(new_op.path.get(new_operate_path.len()).unwrap())
-                {
+                if base_op_is_prefix {
                     if !same_operand {
                         return Ok(new_op.noop());
                     }
@@ -501,12 +494,7 @@ impl Transformer {
                 }
             }
             Operator::ObjectInsert(base_oi) => {
-                if base_op
-                    .path
-                    .get(new_operate_path.len())
-                    .unwrap()
-                    .eq(new_op.path.get(new_operate_path.len()).unwrap())
-                {
+                if base_op_is_prefix {
                     if let Operator::ObjectReplace(new_oi, _) | Operator::ObjectInsert(new_oi) =
                         &new_op.operator
                     {
@@ -522,12 +510,7 @@ impl Transformer {
                 }
             }
             Operator::ObjectDelete(_) => {
-                if base_op
-                    .path
-                    .get(new_operate_path.len())
-                    .unwrap()
-                    .eq(new_op.path.get(new_operate_path.len()).unwrap())
-                {
+                if base_op_is_prefix {
                     if !same_operand {
                         return Ok(new_op.noop());
                     }
