@@ -165,6 +165,19 @@ impl Path {
         self.paths.is_empty()
     }
 
+    pub fn is_prefix_of(&self, path: &Path) -> bool {
+        for (i, p) in self.paths.iter().enumerate() {
+            if let Some(p2) = path.paths.get(i) {
+                if p != p2 {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+        true
+    }
+
     pub fn len(&self) -> usize {
         self.paths.len()
     }

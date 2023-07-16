@@ -368,11 +368,6 @@ impl Transformer {
             return Ok(new_op);
         }
 
-        // [1,2,3], [1,2,5] max_common_path + 1 = op path len
-        // [1,2,3], [1,2,5,8]
-        // [1,2,3], [1,2,3,5] max_common_path == op path len
-        // [1,2,3,7,8], [1,2,1]
-        // [1,2,3,7,8], [1,2,3]
         let new_operate_path = new_op.operate_path();
         let base_operate_path = base_op.operate_path();
         if max_common_path.len() < new_operate_path.len()
@@ -384,75 +379,60 @@ impl Transformer {
             return Ok(new_op);
         }
 
+        // such as:
+        // new_op, base_op
+        // [p1,p2,p3], [p1,p2,p4,p5]
+        // [p1,p2,p3], [p1,p2,p3,p5]
         if base_operate_path.len() > new_operate_path.len() {
             // if base_op's path is longger and contains new_op's path, new_op should include base_op's effect
-            if max_common_path.len() == new_op.path.len() {
+            if new_op.path.is_prefix_of(&base_op.path) {
                 new_op.consume(&max_common_path, &base_op)?;
             }
-            // new_op, base_op
-            // {a: [1,[1,2,3]]}
-            // [1,2,3], [1,2,4,5]
-            // [1,2,3], [1,2,4]
-            // [a,1,1], li, [a,1,3], ld
-            // [1,2,3,7,8], [1,2,3]
             return Ok(new_op);
         }
 
-        // from here, base_op's path is shorter or equal to new_op
-        // base_op, new_op
-        // [p1,p2,p3], [p1,p2,p3] both number or new_op is number
-        // [p1,p2,p3], [p1,p2,p3] non number
-        // [p1,p2,p3], [p1,p2,p3,p4] non number
-        let same_operand = new_operate_path.len() == base_operate_path.len();
+        // from here, base_op's path is shorter or equal to new_op, such as:
+        // new_op, base_op
+        // [p1,p2,p3], [p1,p2,p3]. same operand and base_op is prefix of new_op
+        // [p1,p2,p4], [p1,p2,p3]. same operand
+        // [p1,p2,p3,p4,..], [p1,p2,p3], base_op is prefix of new_op
+        // [p1,p2,p4,p5,..], [p1,p2,p3]
+        let same_operand = base_op.path.len() == new_op.path.len();
+        let base_op_is_prefix = base_op.path.is_prefix_of(&new_op.path);
         match &base_op.operator {
             Operator::ListReplace(li_v, _) => {
-                if new_op.path.get(new_operate_path.len()).unwrap()
-                    == base_op.path.get(new_operate_path.len()).unwrap()
-                {
-                    if !same_operand {
-                        return Ok(new_op.noop());
-                    } else {
-                        match &new_op.operator {
-                            Operator::ListDelete(_) => {
-                                return Ok(new_op.noop());
-                            }
-                            Operator::ListReplace(new_li, _) => {
-                                if side == TransformSide::LEFT {
-                                    return Ok(OperationComponent::new(
-                                        new_op.path.clone(),
-                                        Operator::ListReplace(new_li.clone(), li_v.clone()),
-                                    ));
-                                }
-                            }
-                            _ => {}
+                if base_op_is_prefix {
+                    if same_operand && side == TransformSide::LEFT {
+                        if let Operator::ListReplace(new_li, _) = &new_op.operator {
+                            return Ok(OperationComponent::new(
+                                new_op.path.clone(),
+                                Operator::ListReplace(new_li.clone(), li_v.clone()),
+                            ));
                         }
                     }
+                    return Ok(new_op.noop());
                 }
             }
-            Operator::ListInsert(_) => match new_op.operator {
-                Operator::ListInsert(_) => {
-                    if same_operand && max_common_path.len() == new_op.path.len() {
+            Operator::ListInsert(_) => {
+                if let Operator::ListInsert(_) = &new_op.operator {
+                    if same_operand && base_op_is_prefix {
                         if side == TransformSide::RIGHT {
                             new_op.increase_last_index_path();
                         }
-                    } else if base_op.path.last().unwrap() <= new_op.path.last().unwrap() {
-                        new_op.increase_last_index_path();
+                        return Ok(new_op);
                     }
                 }
-                Operator::ListDelete(_) | Operator::ListReplace(_, _) => {
-                    if same_operand && base_op.path.last().unwrap() <= new_op.path.last().unwrap() {
-                        new_op.increase_last_index_path();
+
+                if base_op.path.last().unwrap() <= new_op.path.last().unwrap() {
+                    new_op.increase_last_index_path();
+                }
+
+                if let Operator::ListMove(i) = &mut new_op.operator {
+                    if same_operand && base_op.path.last().unwrap() <= &PathElement::Index(*i) {
+                        new_op.operator = Operator::ListMove(*i + 1);
                     }
                 }
-                Operator::ListMove(i) => {
-                    if let PathElement::Index(base_i) = base_op.path.last().unwrap() {
-                        if same_operand && base_i <= &i {
-                            new_op.operator = Operator::ListMove(i + 1);
-                        }
-                    }
-                }
-                _ => {}
-            },
+            }
             Operator::ListDelete(_) => {
                 if let Operator::ListMove(lm) = new_op.operator {
                     if same_operand {
@@ -520,8 +500,49 @@ impl Transformer {
                     }
                 }
             }
-            Operator::ObjectInsert(_) => todo!(),
-            Operator::ObjectDelete(_) => todo!(),
+            Operator::ObjectInsert(base_oi) => {
+                if base_op
+                    .path
+                    .get(new_operate_path.len())
+                    .unwrap()
+                    .eq(new_op.path.get(new_operate_path.len()).unwrap())
+                {
+                    if let Operator::ObjectReplace(new_oi, _) | Operator::ObjectInsert(new_oi) =
+                        &new_op.operator
+                    {
+                        if side == TransformSide::LEFT {
+                            return Ok(OperationComponent {
+                                path: new_op.path.clone(),
+                                operator: Operator::ObjectReplace(new_oi.clone(), base_oi.clone()),
+                            });
+                        } else {
+                            return Ok(new_op.noop());
+                        }
+                    }
+                }
+            }
+            Operator::ObjectDelete(_) => {
+                if base_op
+                    .path
+                    .get(new_operate_path.len())
+                    .unwrap()
+                    .eq(new_op.path.get(new_operate_path.len()).unwrap())
+                {
+                    if !same_operand {
+                        return Ok(new_op.noop());
+                    }
+                    if let Operator::ObjectReplace(new_oi, _) | Operator::ObjectInsert(new_oi) =
+                        &new_op.operator
+                    {
+                        return Ok(OperationComponent {
+                            path: new_op.path.clone(),
+                            operator: Operator::ObjectInsert(new_oi.clone()),
+                        });
+                    } else {
+                        return Ok(new_op.noop());
+                    }
+                }
+            }
             Operator::ListMove(_) => todo!(),
             _ => {}
         }
