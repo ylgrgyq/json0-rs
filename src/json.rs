@@ -526,7 +526,97 @@ impl Transformer {
                     }
                 }
             }
-            Operator::ListMove(_) => todo!(),
+            Operator::ListMove(lm) => {
+                if same_operand {
+                    match &mut new_op.operator {
+                        Operator::ListMove(new_op_lm) => {
+                            let from = new_op.path.get(new_operate_path.len()).unwrap().clone();
+                            let to = new_op.path.get(*lm).unwrap().clone();
+                            let other_from = base_op.path.get(new_operate_path.len()).unwrap();
+                            let other_to = base_op.path.get(*lm).unwrap();
+                            if other_from != other_to {
+                                if &from == other_from {
+                                    if side == TransformSide::LEFT {
+                                        new_op
+                                            .path
+                                            .replace(new_operate_path.len(), other_to.clone());
+                                    } else {
+                                        return Ok(new_op.noop());
+                                    }
+                                } else {
+                                    let n_lm = *new_op_lm;
+                                    if &from > other_from {
+                                        new_op.decrease_last_index_path();
+                                    }
+                                    if &from > other_to {
+                                        new_op.increase_last_index_path();
+                                    } else if &from == other_to {
+                                        if other_from > other_to {
+                                            new_op.increase_last_index_path();
+                                        }
+                                        if from == to {
+                                            new_op.operator = Operator::ListMove(n_lm + 1);
+                                        }
+                                    }
+                                    if &to > other_from {
+                                        new_op.operator = Operator::ListMove(n_lm - 1);
+                                    } else if &to == other_from {
+                                        if to > from {
+                                            new_op.operator = Operator::ListMove(n_lm - 1);
+                                        }
+                                    }
+                                    if &to > other_to {
+                                        new_op.operator = Operator::ListMove(n_lm + 1);
+                                    } else if &to == other_to {
+                                        if (other_to > other_from && to > from)
+                                            || (other_to < other_from && to < from)
+                                        {
+                                            if side == TransformSide::RIGHT {
+                                                new_op.operator = Operator::ListMove(n_lm + 1);
+                                            }
+                                        } else {
+                                            if to > from {
+                                                new_op.operator = Operator::ListMove(n_lm + 1);
+                                            } else if &to == other_from {
+                                                new_op.operator = Operator::ListMove(n_lm - 1);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            return Ok(new_op);
+                        }
+                        Operator::ListInsert(_) => {
+                            let from = base_op.path.get(new_operate_path.len()).unwrap();
+                            let to = base_op.path.get(*lm).unwrap();
+                            let p = new_op.path.get(new_operate_path.len()).unwrap().clone();
+                            if &p > from {
+                                new_op.decrease_last_index_path();
+                            }
+                            if &p > to {
+                                new_op.increase_last_index_path();
+                            }
+                            return Ok(new_op);
+                        }
+                        _ => {}
+                    }
+                }
+                let from = base_op.path.get(new_operate_path.len()).unwrap();
+                let to = base_op.path.get(*lm).unwrap();
+                let p = new_op.path.get(new_operate_path.len()).unwrap().clone();
+                if &p == from {
+                    new_op.path.replace(new_operate_path.len(), to.clone());
+                } else {
+                    if &p > from {
+                        new_op.decrease_last_index_path();
+                    }
+                    if &p > to {
+                        new_op.increase_last_index_path();
+                    } else if &p == to && from > to {
+                        new_op.increase_last_index_path();
+                    }
+                }
+            }
             _ => {}
         }
 
