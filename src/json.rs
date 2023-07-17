@@ -265,29 +265,29 @@ impl Transformer {
         &self,
         operation: &Operation,
         base_operation: &Operation,
-        side: TransformSide,
-    ) -> Result<Operation> {
+    ) -> Result<(Operation, Operation)> {
         if base_operation.is_empty() {
-            return Ok(operation.clone());
+            return Ok((operation.clone(), vec![]));
         }
 
         operation.validates()?;
         base_operation.validates()?;
 
         if operation.len() == 1 && base_operation.len() == 1 {
-            let o = self.transform_component(
-                operation.get(0).unwrap(),
+            let a = self.transform_component(
+                operation.get(0).unwrap().clone(),
                 base_operation.get(0).unwrap(),
-                side,
+                TransformSide::LEFT,
             )?;
-            return Ok(vec![o]);
+            let b = self.transform_component(
+                base_operation.get(0).unwrap().clone(),
+                operation.get(0).unwrap(),
+                TransformSide::RIGHT,
+            )?;
+            return Ok((vec![a], vec![b]));
         }
 
-        if side == TransformSide::LEFT {
-            Ok(self.do_transform(operation, base_operation, side)?.0)
-        } else {
-            Ok(self.do_transform(operation, base_operation, side)?.1)
-        }
+        self.transform_matrix(operation.clone(), base_operation.clone())
     }
 
     pub fn append(&self, operation: &mut Operation, op: &OperationComponent) -> Result<()> {
@@ -362,22 +362,65 @@ impl Transformer {
         Ok(ret)
     }
 
-    fn do_transform(
+    fn transform_matrix(
         &self,
-        operation: &Operation,
-        base_operation: &Operation,
-        side: TransformSide,
+        operation: Operation,
+        base_operation: Operation,
     ) -> Result<(Operation, Operation)> {
-        todo!()
+        if operation.is_empty() || base_operation.is_empty() {
+            return Ok((operation, base_operation));
+        }
+
+        let mut out_b = vec![];
+        let mut ops = operation;
+        for base_op in base_operation {
+            let (a, b) = self.transform_multi(ops, base_op)?;
+            ops = a;
+
+            if let Some(o) = b {
+                out_b.push(o);
+            }
+        }
+        Ok((ops, out_b))
+    }
+
+    fn transform_multi(
+        &self,
+        operation: Operation,
+        base_op: OperationComponent,
+    ) -> Result<(Operation, Option<OperationComponent>)> {
+        let mut out: Vec<OperationComponent> = vec![];
+
+        let mut base = base_op.not_noop();
+        for op in operation {
+            match base {
+                Some(b) => {
+                    let backup = op.clone();
+                    let a = self.transform_component(op, &b, TransformSide::LEFT)?;
+                    let b = self.transform_component(b, &backup, TransformSide::RIGHT)?;
+                    base = b.not_noop();
+                    if let Operator::Noop() = a.operator {
+                        continue;
+                    }
+
+                    out.push(a);
+                }
+                None => {
+                    out.push(op.clone());
+                    continue;
+                }
+            }
+        }
+        Ok((out, base))
     }
 
     fn transform_component(
         &self,
-        new_op: &OperationComponent,
+        new_op: OperationComponent,
         base_op: &OperationComponent,
         side: TransformSide,
     ) -> Result<OperationComponent> {
-        let mut new_op = new_op.clone();
+        let mut new_op = new_op;
 
         let max_common_path = base_op.path.max_common_path(&new_op.path);
         if max_common_path.is_empty() {
@@ -422,7 +465,7 @@ impl Transformer {
                     if same_operand && side == TransformSide::LEFT {
                         if let Operator::ListReplace(new_li, _) = &new_op.operator {
                             return Ok(OperationComponent::new(
-                                new_op.path.clone(),
+                                new_op.path,
                                 Operator::ListReplace(new_li.clone(), li_v.clone()),
                             ));
                         }

@@ -161,6 +161,22 @@ impl OperationComponent {
         }
     }
 
+    pub fn clone_not_noop(&self) -> Option<OperationComponent> {
+        if let Operator::Noop() = self.operator {
+            None
+        } else {
+            Some(self.clone())
+        }
+    }
+
+    pub fn not_noop(self) -> Option<OperationComponent> {
+        if let Operator::Noop() = self.operator {
+            None
+        } else {
+            Some(self)
+        }
+    }
+
     pub fn merge(&mut self, op: &OperationComponent) -> bool {
         if let Some(new_operator) = match &self.operator {
             Operator::Noop() => Some(op.operator.clone()),
