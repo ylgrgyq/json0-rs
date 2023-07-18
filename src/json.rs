@@ -261,6 +261,10 @@ pub enum TransformSide {
 pub struct Transformer {}
 
 impl Transformer {
+    pub fn new() -> Transformer {
+        Transformer {}
+    }
+
     pub fn transform(
         &self,
         operation: &Operation,

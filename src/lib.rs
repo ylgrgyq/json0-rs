@@ -1,5 +1,5 @@
 mod common;
-mod error;
+pub mod error;
 pub mod json;
 mod operation;
 pub mod path;
