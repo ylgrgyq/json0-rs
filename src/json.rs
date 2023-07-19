@@ -3,7 +3,7 @@ use std::{fmt::Display, mem, vec};
 use crate::{
     common::Validation,
     error::{JsonError, Result},
-    operation::{Appliable, OperationComponent, Operator},
+    operation::{Appliable, Operation, OperationComponent, Operator},
     path::{Path, PathElement},
 };
 
@@ -239,17 +239,6 @@ impl Appliable for Vec<serde_json::Value> {
             }
             _ => Err(JsonError::BadPath),
         }
-    }
-}
-
-pub type Operation = Vec<OperationComponent>;
-
-impl Validation for Vec<OperationComponent> {
-    fn validates(&self) -> Result<()> {
-        for op in self.iter() {
-            op.validates()?;
-        }
-        Ok(())
     }
 }
 

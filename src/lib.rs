@@ -1,7 +1,7 @@
 mod common;
 pub mod error;
 pub mod json;
-mod operation;
+pub mod operation;
 pub mod path;
 
 #[cfg(test)]

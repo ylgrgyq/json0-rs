@@ -139,14 +139,18 @@ impl OperationComponent {
 
     pub fn from_str(input: &str) -> Result<OperationComponent> {
         let json_value: Value = serde_json::from_str(input)?;
-        let path_value = json_value.get("p");
+        OperationComponent::from_json_value(json_value)
+    }
+
+    pub fn from_json_value(input: Value) -> Result<OperationComponent> {
+        let path_value = input.get("p");
 
         if path_value.is_none() {
             return Err(JsonError::InvalidOperation("Missing path".into()));
         }
 
         let paths = Path::from_json_value(path_value.unwrap())?;
-        let operator = Operator::from_json_value(&json_value)?;
+        let operator = Operator::from_json_value(&input)?;
 
         Ok(OperationComponent {
             path: paths,
@@ -332,5 +336,22 @@ impl Validation for OperationComponent {
         }
 
         self.operator.validates()
+    }
+}
+
+pub type Operation = Vec<OperationComponent>;
+
+impl Validation for Operation {
+    fn validates(&self) -> Result<()> {
+        for op in self.iter() {
+            op.validates()?;
+        }
+        Ok(())
+    }
+}
+
+impl From<OperationComponent> for Operation {
+    fn from(input: OperationComponent) -> Self {
+        vec![input]
     }
 }
