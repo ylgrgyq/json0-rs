@@ -1,4 +1,7 @@
-use std::mem;
+use std::{
+    mem,
+    ops::{Deref, DerefMut},
+};
 
 use serde_json::{Map, Value};
 
@@ -103,7 +106,7 @@ impl Validation for Operator {
     fn validates(&self) -> Result<()> {
         match self {
             Operator::AddNumber(v) => match v {
-                Value::Number(n) => Ok(()),
+                Value::Number(_) => Ok(()),
                 _ => Err(JsonError::InvalidOperation(
                     "Value in AddNumber operator is not a number".into(),
                 )),
@@ -130,7 +133,7 @@ impl TryFrom<Value> for Operator {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct OperationComponent {
     pub path: Path,
     pub operator: Operator,
@@ -351,11 +354,38 @@ impl TryFrom<Value> for OperationComponent {
     }
 }
 
-pub type Operation = Vec<OperationComponent>;
+#[derive(Debug, Clone, PartialEq)]
+pub struct Operation {
+    operations: Vec<OperationComponent>,
+}
+
+impl Deref for Operation {
+    type Target = Vec<OperationComponent>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.operations
+    }
+}
+
+impl DerefMut for Operation {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.operations
+    }
+}
+
+impl IntoIterator for Operation {
+    type Item = OperationComponent;
+
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.operations.into_iter()
+    }
+}
 
 impl Validation for Operation {
     fn validates(&self) -> Result<()> {
-        for op in self.iter() {
+        for op in self.operations.iter() {
             op.validates()?;
         }
         Ok(())
@@ -364,6 +394,14 @@ impl Validation for Operation {
 
 impl From<OperationComponent> for Operation {
     fn from(input: OperationComponent) -> Self {
-        vec![input]
+        Operation {
+            operations: vec![input],
+        }
+    }
+}
+
+impl From<Vec<OperationComponent>> for Operation {
+    fn from(operations: Vec<OperationComponent>) -> Self {
+        Operation { operations }
     }
 }
