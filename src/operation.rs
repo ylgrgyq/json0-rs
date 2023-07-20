@@ -5,7 +5,7 @@ use serde_json::{Map, Value};
 use crate::{
     common::Validation,
     error::JsonError,
-    error::Result,
+    error::{self, Result},
     path::{Path, PathElement},
 };
 
@@ -33,19 +33,6 @@ pub enum Operator {
 }
 
 impl Operator {
-    fn from_json_value(input: &Value) -> Result<Operator> {
-        match input {
-            Value::Object(obj) => {
-                let operator = Operator::map_to_operator(obj)?;
-                operator.validate_json_object_size(obj)?;
-                Ok(operator)
-            }
-            _ => Err(JsonError::InvalidOperation(
-                "Operator can only be parsed from JSON Object".into(),
-            )),
-        }
-    }
-
     fn map_to_operator(obj: &Map<String, Value>) -> Result<Operator> {
         if let Some(na) = obj.get("na") {
             return Ok(Operator::AddNumber(na.clone()));
@@ -126,6 +113,23 @@ impl Validation for Operator {
     }
 }
 
+impl TryFrom<Value> for Operator {
+    type Error = JsonError;
+
+    fn try_from(input: Value) -> std::result::Result<Self, Self::Error> {
+        match &input {
+            Value::Object(obj) => {
+                let operator = Operator::map_to_operator(obj)?;
+                operator.validate_json_object_size(obj)?;
+                Ok(operator)
+            }
+            _ => Err(JsonError::InvalidOperation(
+                "Operator can only be parsed from JSON Object".into(),
+            )),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct OperationComponent {
     pub path: Path,
@@ -135,27 +139,6 @@ pub struct OperationComponent {
 impl OperationComponent {
     pub fn new(path: Path, operator: Operator) -> OperationComponent {
         OperationComponent { path, operator }
-    }
-
-    pub fn from_str(input: &str) -> Result<OperationComponent> {
-        let json_value: Value = serde_json::from_str(input)?;
-        OperationComponent::from_json_value(json_value)
-    }
-
-    pub fn from_json_value(input: Value) -> Result<OperationComponent> {
-        let path_value = input.get("p");
-
-        if path_value.is_none() {
-            return Err(JsonError::InvalidOperation("Missing path".into()));
-        }
-
-        let paths = Path::from_json_value(path_value.unwrap())?;
-        let operator = Operator::from_json_value(&input)?;
-
-        Ok(OperationComponent {
-            path: paths,
-            operator,
-        })
     }
 
     pub fn noop(&self) -> OperationComponent {
@@ -336,6 +319,35 @@ impl Validation for OperationComponent {
         }
 
         self.operator.validates()
+    }
+}
+
+impl TryFrom<&str> for OperationComponent {
+    type Error = JsonError;
+
+    fn try_from(input: &str) -> std::result::Result<Self, Self::Error> {
+        let json_value: Value = serde_json::from_str(input)?;
+        json_value.try_into()
+    }
+}
+
+impl TryFrom<Value> for OperationComponent {
+    type Error = error::JsonError;
+
+    fn try_from(input: Value) -> std::result::Result<Self, Self::Error> {
+        let path_value = input.get("p");
+
+        if path_value.is_none() {
+            return Err(JsonError::InvalidOperation("Missing path".into()));
+        }
+
+        let paths = Path::from_json_value(path_value.unwrap())?;
+        let operator = input.try_into()?;
+
+        Ok(OperationComponent {
+            path: paths,
+            operator,
+        })
     }
 }
 

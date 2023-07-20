@@ -776,8 +776,8 @@ mod tests {
     #[test]
     fn test_apply_add_number() {
         let mut json = JSON::from_str("{\"level1\": 10}").unwrap();
-        let operation_comp =
-            OperationComponent::from_str("{\"p\":[\"level1\"], \"na\":100}").unwrap();
+        let operation_comp: OperationComponent =
+            "{\"p\":[\"level1\"], \"na\":100}".try_into().unwrap();
         json.apply(vec![vec![operation_comp.clone()]]).unwrap();
 
         assert_eq!(json.to_string(), r#"{"level1":110}"#);
@@ -788,15 +788,13 @@ mod tests {
         let mut json = JSON::from_str(r#"{}"#).unwrap();
         // insert to empty object
         let operation_comp =
-            OperationComponent::from_str(r#"{"p":["level1"], "oi":{"level2":{}}}"#).unwrap();
+            r#"{"p":["level1"], "oi":{"level2":{}}}"#.try_into().unwrap();
         json.apply(vec![vec![operation_comp]]).unwrap();
         assert_eq!(json.to_string(), r#"{"level1":{"level2":{}}}"#);
 
         // insert to inner object
-        let operation_comp = OperationComponent::from_str(
-            r#"{"p":["level1", "level2"], "oi":{"level3":[1, {"level4":{}}]}}"#,
-        )
-        .unwrap();
+        let operation_comp = 
+            r#"{"p":["level1", "level2"], "oi":{"level3":[1, {"level4":{}}]}}"#.try_into().unwrap();
         json.apply(vec![vec![operation_comp]]).unwrap();
         assert_eq!(
             json.to_string(),
@@ -804,10 +802,10 @@ mod tests {
         );
 
         // insert to deep inner object with number index in path
-        let operation_comp = OperationComponent::from_str(
-            r#"{"p":["level1", "level2", "level3", 1, "level4"], "oi":{"level5":[1, 2]}}"#,
-        )
-        .unwrap();
+        let operation_comp =
+            r#"{"p":["level1", "level2", "level3", 1, "level4"], "oi":{"level5":[1, 2]}}"#
+                .try_into()
+                .unwrap();
         json.apply(vec![vec![operation_comp]]).unwrap();
         assert_eq!(
             json.to_string(),
@@ -815,10 +813,9 @@ mod tests {
         );
 
         // replace key without compare
-        let operation_comp = OperationComponent::from_str(
-            r#"{"p":["level1", "level2", "level3", 1, "level4"], "oi":[3,4]}"#,
-        )
-        .unwrap();
+        let operation_comp = r#"{"p":["level1", "level2", "level3", 1, "level4"], "oi":[3,4]}"#
+            .try_into()
+            .unwrap();
         json.apply(vec![vec![operation_comp]]).unwrap();
         assert_eq!(
             json.to_string(),
@@ -835,10 +832,9 @@ mod tests {
 
         // delete to deep inner object with number index in path
         let mut json = origin_json.clone();
-        let operation_comp = OperationComponent::from_str(
-            r#"{"p":["level1", "level2", "level3", 1, "level41"], "od":[1, 2]}"#,
-        )
-        .unwrap();
+        let operation_comp = r#"{"p":["level1", "level2", "level3", 1, "level41"], "od":[1, 2]}"#
+            .try_into()
+            .unwrap();
         json.apply(vec![vec![operation_comp]]).unwrap();
         assert_eq!(
             json.to_string(),
@@ -847,10 +843,10 @@ mod tests {
 
         // delete to inner object
         let mut json = origin_json.clone();
-        let operation_comp = OperationComponent::from_str(
-            r#"{"p":["level1", "level2", "level3"], "od":[1,{"level41":[1,2], "level42":[3,4]}]}"#,
-        )
-        .unwrap();
+        let operation_comp =
+            r#"{"p":["level1", "level2", "level3"], "od":[1,{"level41":[1,2], "level42":[3,4]}]}"#
+                .try_into()
+                .unwrap();
         json.apply(vec![vec![operation_comp]]).unwrap();
         assert_eq!(json.to_string(), r#"{"level1":{"level2":{}}}"#);
     }
@@ -864,10 +860,10 @@ mod tests {
 
         // replace deep inner object with number index in path
         let mut json = origin_json.clone();
-        let operation_comp = OperationComponent::from_str(
-            r#"{"p":["level1", "level2", "level3", 1, "level41"], "oi":{"5":"6"}, "od":[1, 2]}"#,
-        )
-        .unwrap();
+        let operation_comp =
+            r#"{"p":["level1", "level2", "level3", 1, "level41"], "oi":{"5":"6"}, "od":[1, 2]}"#
+                .try_into()
+                .unwrap();
         json.apply(vec![vec![operation_comp]]).unwrap();
         assert_eq!(
             json.to_string(),
@@ -876,10 +872,9 @@ mod tests {
 
         // replace to inner object
         let mut json = origin_json.clone();
-        let operation_comp = OperationComponent::from_str(
-            r#"{"p":["level1", "level2"], "oi":"hello", "od":{"level3":[1,{"level41":[1,2], "level42":[3,4]}]}}"#,
-        )
-        .unwrap();
+        let operation_comp = 
+            r#"{"p":["level1", "level2"], "oi":"hello", "od":{"level3":[1,{"level41":[1,2], "level42":[3,4]}]}}"#.try_into()
+            .unwrap();
         json.apply(vec![vec![operation_comp]]).unwrap();
         assert_eq!(json.to_string(), r#"{"level1":{"level2":"hello"}}"#);
     }
@@ -890,25 +885,25 @@ mod tests {
 
         // insert to empty array
         let operation_comp =
-            OperationComponent::from_str(r#"{"p":["level1", 0], "li":{"hello":[1]}}"#).unwrap();
+        r#"{"p":["level1", 0], "li":{"hello":[1]}}"#.try_into().unwrap();
         json.apply(vec![vec![operation_comp]]).unwrap();
         assert_eq!(json.to_string(), r#"{"level1":[{"hello":[1]}]}"#);
 
         // insert to array
         let operation_comp =
-            OperationComponent::from_str(r#"{"p":["level1", 0], "li":1}"#).unwrap();
+        r#"{"p":["level1", 0], "li":1}"#.try_into().unwrap();
         json.apply(vec![vec![operation_comp]]).unwrap();
         assert_eq!(json.to_string(), r#"{"level1":[1,{"hello":[1]}]}"#);
 
         // insert to inner array
         let operation_comp =
-            OperationComponent::from_str(r#"{"p":["level1", 1, "hello",1], "li":[7,8]}"#).unwrap();
+            r#"{"p":["level1", 1, "hello",1], "li":[7,8]}"#.try_into().unwrap();
         json.apply(vec![vec![operation_comp]]).unwrap();
         assert_eq!(json.to_string(), r#"{"level1":[1,{"hello":[1,[7,8]]}]}"#);
 
         // append
         let operation_comp =
-            OperationComponent::from_str(r#"{"p":["level1", 10], "li":[2,3]}"#).unwrap();
+            r#"{"p":["level1", 10], "li":[2,3]}"#.try_into().unwrap();
         json.apply(vec![vec![operation_comp]]).unwrap();
         assert_eq!(
             json.to_string(),
@@ -923,14 +918,14 @@ mod tests {
         // delete from innser array
         let mut json = origin_json.clone();
         let operation_comp =
-            OperationComponent::from_str(r#"{"p":["level1", 1, "hello", 1], "ld":[7,8]}"#).unwrap();
+            r#"{"p":["level1", 1, "hello", 1], "ld":[7,8]}"#.try_into().unwrap();
         json.apply(vec![vec![operation_comp]]).unwrap();
         assert_eq!(json.to_string(), r#"{"level1":[1,{"hello":[1]}]}"#);
 
         // delete from inner object
         let mut json = origin_json.clone();
         let operation_comp =
-            OperationComponent::from_str(r#"{"p":["level1", 1], "ld":{"hello":[1,[7,8]]}}"#)
+        r#"{"p":["level1", 1], "ld":{"hello":[1,[7,8]]}}"#.try_into()
                 .unwrap();
         json.apply(vec![vec![operation_comp]]).unwrap();
         assert_eq!(json.to_string(), r#"{"level1":[1]}"#);
@@ -942,9 +937,8 @@ mod tests {
 
         // replace from innser array
         let mut json = origin_json.clone();
-        let operation_comp = OperationComponent::from_str(
-            r#"{"p":["level1", 1, "hello", 1], "li":{"hello":"world"}, "ld":[7,8]}"#,
-        )
+        let operation_comp = 
+            r#"{"p":["level1", 1, "hello", 1], "li":{"hello":"world"}, "ld":[7,8]}"#.try_into()
         .unwrap();
         json.apply(vec![vec![operation_comp]]).unwrap();
         assert_eq!(
@@ -954,10 +948,8 @@ mod tests {
 
         // replace from inner object
         let mut json = origin_json.clone();
-        let operation_comp = OperationComponent::from_str(
-            r#"{"p":["level1", 1], "li": {"hello":"world"}, "ld":{"hello":[1,[7,8]]}}"#,
-        )
-        .unwrap();
+        let operation_comp = 
+            r#"{"p":["level1", 1], "li": {"hello":"world"}, "ld":{"hello":[1,[7,8]]}}"#.try_into().unwrap();
         json.apply(vec![vec![operation_comp]]).unwrap();
         assert_eq!(json.to_string(), r#"{"level1":[1,{"hello":"world"}]}"#);
     }
@@ -969,7 +961,7 @@ mod tests {
         // move left
         let mut json = origin_json.clone();
         let operation_comp =
-            OperationComponent::from_str(r#"{"p":["level1", 1, "hello", 2], "lm":1}"#).unwrap();
+            r#"{"p":["level1", 1, "hello", 2], "lm":1}"#.try_into().unwrap();
         json.apply(vec![vec![operation_comp]]).unwrap();
         assert_eq!(
             json.to_string(),
@@ -979,7 +971,7 @@ mod tests {
         // move right
         let mut json = origin_json.clone();
         let operation_comp =
-            OperationComponent::from_str(r#"{"p":["level1", 1, "hello", 1], "lm":2}"#).unwrap();
+            r#"{"p":["level1", 1, "hello", 1], "lm":2}"#.try_into().unwrap();
         json.apply(vec![vec![operation_comp]]).unwrap();
         assert_eq!(
             json.to_string(),
@@ -989,7 +981,7 @@ mod tests {
         // stay put
         let mut json = origin_json.clone();
         let operation_comp =
-            OperationComponent::from_str(r#"{"p":["level1", 1, "hello", 1], "lm":1}"#).unwrap();
+            r#"{"p":["level1", 1, "hello", 1], "lm":1}"#.try_into().unwrap();
         json.apply(vec![vec![operation_comp]]).unwrap();
         assert_eq!(
             json.to_string(),

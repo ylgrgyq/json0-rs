@@ -1,6 +1,7 @@
 use log::info;
 use my_json0::error::Result;
-use my_json0::json::{Operation, Transformer};
+use my_json0::json::Transformer;
+use my_json0::operation::Operation;
 use serde_json::Value;
 use std::fs::File;
 use std::io::{self, BufRead};
@@ -30,17 +31,17 @@ where
     Ok(out)
 }
 
-trait TestPattern {
-    fn new() -> T;
-    fn load();
-    fn run();
-}
+// trait TestPattern {
+//     fn new() -> T;
+//     fn load();
+//     fn run();
+// }
 
-trait Test {
-    type Input;
-    fn load<T: Iterator<Item = Value>>(&mut self, input: T);
-    fn run
-}
+// trait Test {
+//     type Input;
+//     fn load<T: Iterator<Item = Value>>(&mut self, input: T);
+//     fn run
+// }
 
 struct TransformTest {
     input_left: Operation,
@@ -49,34 +50,34 @@ struct TransformTest {
     result_right: Operation,
 }
 
-impl TestPattern for TransformTest {
-    fn load() {
-        todo!()
-    }
+// impl TestPattern for TransformTest {
+//     fn load() {
+//         todo!()
+//     }
 
-    fn run() {
-        todo!()
-    }
-}
+//     fn run() {
+//         todo!()
+//     }
+// }
 
-struct TransformTestDriver<T: TestPattern> {
-    pattern: T,
-}
+// struct TransformTestDriver<T: TestPattern> {
+//     pattern: T,
+// }
 
-impl<T: TestPattern> TransformTestDriver<T> {
-    fn load(&self) -> Result<()> {
-        self.pattern.new();
-        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        d.push("tests/resources/transform_test_case");
+// impl<T: TestPattern> TransformTestDriver<T> {
+//     fn load(&self) -> Result<()> {
+//         self.pattern.new();
+//         let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+//         d.push("tests/resources/transform_test_case");
 
-        let json_values = read_json_value(&d)?;
-        json_values.chunks(3);
+//         let json_values = read_json_value(&d)?;
+//         json_values.chunks(3);
 
-        let transformer = Transformer::new();
-        // transformer.transform(operation, base_operation)
-        Ok(())
-    }
-}
+//         let transformer = Transformer::new();
+//         // transformer.transform(operation, base_operation)
+//         Ok(())
+//     }
+// }
 
 #[test]
 fn test_merge_delete_no_remain() {
