@@ -1,6 +1,7 @@
 use std::{
     mem,
     ops::{Deref, DerefMut},
+    vec,
 };
 
 use serde_json::{Map, Value};
@@ -68,7 +69,7 @@ impl Operator {
             return Ok(Operator::ObjectDelete(od.clone()));
         }
 
-        Err(JsonError::InvalidOperation("Unknown operator".into()))
+        Ok(Operator::Noop())
     }
 
     fn validate_json_object_size(&self, obj: &Map<String, Value>) -> Result<()> {
@@ -403,5 +404,25 @@ impl From<OperationComponent> for Operation {
 impl From<Vec<OperationComponent>> for Operation {
     fn from(operations: Vec<OperationComponent>) -> Self {
         Operation { operations }
+    }
+}
+
+impl TryFrom<Value> for Operation {
+    type Error = JsonError;
+
+    fn try_from(value: Value) -> std::result::Result<Self, Self::Error> {
+        let mut operations = vec![];
+        match value {
+            Value::Array(arr) => {
+                for v in arr {
+                    let op: OperationComponent = v.try_into()?;
+                    operations.push(op);
+                }
+            }
+            _ => {
+                operations.push(value.try_into()?);
+            }
+        }
+        Ok(Operation { operations })
     }
 }

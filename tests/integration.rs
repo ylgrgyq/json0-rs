@@ -1,7 +1,7 @@
-use log::info;
-use my_json0::error::Result;
+use log::debug;
+use my_json0::error::{JsonError, Result};
 use my_json0::json::Transformer;
-use my_json0::operation::{Operation, OperationComponent};
+use my_json0::operation::Operation;
 use serde_json::Value;
 use std::fs::File;
 use std::io::{self, BufRead};
@@ -24,7 +24,12 @@ where
     if let Ok(lines) = read_lines(file_name) {
         for line in lines {
             if let Ok(v) = line {
-                out.push(serde_json::from_str(&v)?);
+                if !v.is_empty() && !v.starts_with("#") {
+                    let val = serde_json::from_str(&v).map_err(|e| {
+                        JsonError::UnexpectedError(format!("parse line: {} failed. {}", v, e))
+                    })?;
+                    out.push(val);
+                }
             }
         }
     }
@@ -36,11 +41,12 @@ trait Test<E> {
 }
 
 trait TestPattern<T: Test<E>, E> {
-    fn load<I: Iterator<Item = Value>>(&self, input: &mut I) -> Option<T>;
+    fn load<I: Iterator<Item = Operation>>(&self, input: &mut I) -> Result<Option<T>>;
     fn executor(&self) -> &E;
     fn test_input_path(&self) -> PathBuf;
 }
 
+#[derive(Debug)]
 struct TransformTest {
     input_left: Operation,
     input_right: Operation,
@@ -50,6 +56,8 @@ struct TransformTest {
 
 impl Test<Transformer> for TransformTest {
     fn test(&self, executor: &Transformer) {
+        debug!("execute test {:?} {:?}", self.input_left, self.input_right);
+
         let (l, r) = executor
             .transform(&self.input_left, &self.input_right)
             .unwrap();
@@ -73,26 +81,28 @@ impl<'a> TransformTestPattern<'a> {
 }
 
 impl<'a> TestPattern<TransformTest, Transformer> for TransformTestPattern<'a> {
-    fn load<I: Iterator<Item = Value>>(&self, input: &mut I) -> Option<TransformTest> {
+    fn load<I: Iterator<Item = Operation>>(&self, input: &mut I) -> Result<Option<TransformTest>> {
         if let Some(input_left) = input.next() {
-            let input_left: Operation = OperationComponent::try_from(input_left).unwrap().into();
-            let input_right: Operation = OperationComponent::try_from(input.next().unwrap())
-                .unwrap()
-                .into();
-            let result_left: Operation = OperationComponent::try_from(input.next().unwrap())
-                .unwrap()
-                .into();
-            let result_right: Operation = OperationComponent::try_from(input.next().unwrap())
-                .unwrap()
-                .into();
-            return Some(TransformTest {
-                input_left,
-                input_right,
-                result_left,
-                result_right,
-            });
+            if let Some(input_right) = input.next() {
+                if let Some(result_left) = input.next() {
+                    if let Some(result_right) = input.next() {
+                        let test = TransformTest {
+                            input_left,
+                            input_right,
+                            result_left,
+                            result_right,
+                        };
+                        debug!("load test {:?}", &test);
+                        return Ok(Some(test));
+                    }
+                }
+            }
+            return Err(JsonError::UnexpectedError(
+                "Insufficient operation to construct a transform test".into(),
+            ));
         }
-        None
+
+        Ok(None)
     }
 
     fn executor(&self) -> &Transformer {
@@ -110,9 +120,21 @@ fn run_test<T: Test<E>, E, P: Sized + TestPattern<T, E>>(pattern: &P) -> Result<
     let input_data_path = pattern.test_input_path();
     let json_values = read_json_value(&input_data_path)?;
     let transformer = pattern.executor();
-    let mut iter = json_values.into_iter();
+    let mut iter = json_values
+        .into_iter()
+        .map(|v| {
+            let v_str = v.to_string();
+            v.try_into().map_err(|e| {
+                JsonError::InvalidOperation(format!(
+                    "{} can not be parsed to Operation due to error {}",
+                    v_str, e
+                ))
+            })
+        })
+        .collect::<Result<Vec<Operation>>>()?
+        .into_iter();
     loop {
-        if let Some(test) = pattern.load(&mut iter) {
+        if let Some(test) = pattern.load(&mut iter)? {
             test.test(&transformer);
         } else {
             break;
@@ -123,7 +145,19 @@ fn run_test<T: Test<E>, E, P: Sized + TestPattern<T, E>>(pattern: &P) -> Result<
 }
 
 #[test]
-fn test_transform() {
-    let pattern = TransformTestPattern::new("tests/resources/transform_test_case");
+fn test_transform_list() {
+    let pattern = TransformTestPattern::new("tests/resources/transform_list_case.json");
+    run_test(&pattern).unwrap();
+}
+
+#[test]
+fn test_transform_object() {
+    let pattern = TransformTestPattern::new("tests/resources/transform_object_case.json");
+    run_test(&pattern).unwrap();
+}
+
+#[test]
+fn test_other_transform_case() {
+    let pattern = TransformTestPattern::new("tests/resources/other_transform_case.json");
     run_test(&pattern).unwrap();
 }

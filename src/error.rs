@@ -2,6 +2,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum JsonError {
+    #[error("Unexpected error: {0}")]
+    UnexpectedError(String),
     #[error("The parameter: \"{0}\" is invalid for reason: {1}")]
     InvalidParameter(String, String),
     #[error("Invalid operation: \"{0}\"")]
