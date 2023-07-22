@@ -31,15 +31,14 @@ where
     Ok(out)
 }
 
-trait TestPattern {
-    // fn new() -> T;
-    fn load();
-    fn run();
+trait Test<E> {
+    fn test(&self, executor: &E);
 }
 
-trait Test {
-    type Input;
-    fn load<T: Iterator<Item = Value>>(&mut self, input: T);
+trait TestPattern<T: Test<E>, E> {
+    fn load<I: Iterator<Item = Value>>(&self, input: &mut I) -> Option<T>;
+    fn executor(&self) -> &E;
+    fn test_input_path(&self) -> PathBuf;
 }
 
 struct TransformTest {
@@ -49,8 +48,32 @@ struct TransformTest {
     result_right: Operation,
 }
 
-impl TransformTest {
-    fn load<T: Iterator<Item = Value>>(&mut self, mut input: T) -> Option<TransformTest> {
+impl Test<Transformer> for TransformTest {
+    fn test(&self, executor: &Transformer) {
+        let (l, r) = executor
+            .transform(&self.input_left, &self.input_right)
+            .unwrap();
+        assert_eq!(self.result_left, l);
+        assert_eq!(self.result_right, r);
+    }
+}
+
+struct TransformTestPattern<'a> {
+    path: &'a str,
+    transformer: Transformer,
+}
+
+impl<'a> TransformTestPattern<'a> {
+    fn new(p: &'a str) -> TransformTestPattern<'a> {
+        TransformTestPattern {
+            path: p,
+            transformer: Transformer::new(),
+        }
+    }
+}
+
+impl<'a> TestPattern<TransformTest, Transformer> for TransformTestPattern<'a> {
+    fn load<I: Iterator<Item = Value>>(&self, input: &mut I) -> Option<TransformTest> {
         if let Some(input_left) = input.next() {
             let input_left: Operation = OperationComponent::try_from(input_left).unwrap().into();
             let input_right: Operation = OperationComponent::try_from(input.next().unwrap())
@@ -72,53 +95,35 @@ impl TransformTest {
         None
     }
 
-    fn run(&self, transformer: Transformer) {
-        let (l, r) = transformer
-            .transform(&self.input_left, &self.input_right)
-            .unwrap();
-        assert_eq!(self.result_left, l);
+    fn executor(&self) -> &Transformer {
+        &self.transformer
+    }
+
+    fn test_input_path(&self) -> PathBuf {
+        let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        p.push(self.path);
+        p
     }
 }
 
-struct TransformTestDriver<T: TestPattern> {
-    pattern: T,
-}
-
-impl<T: TestPattern> TransformTestDriver<T> {
-    fn load(&self) -> Result<()> {
-        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        d.push("tests/resources/transform_test_case");
-
-        let json_values = read_json_value(&d)?;
-        json_values.chunks(3);
-
-        let transformer = Transformer::new();
-        // transformer.transform(operation, base_operation)
-        Ok(())
+fn run_test<T: Test<E>, E, P: Sized + TestPattern<T, E>>(pattern: &P) -> Result<()> {
+    let input_data_path = pattern.test_input_path();
+    let json_values = read_json_value(&input_data_path)?;
+    let transformer = pattern.executor();
+    let mut iter = json_values.into_iter();
+    loop {
+        if let Some(test) = pattern.load(&mut iter) {
+            test.test(&transformer);
+        } else {
+            break;
+        }
     }
+
+    Ok(())
 }
 
 #[test]
-fn test_merge_delete_no_remain() {
-    let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    d.push("tests/resources/transform_test_case");
-
-    info!("asdfadfasdf 11 {:?}", d);
-    info!("asdfsdf {:?}", read_json_value(&d).unwrap())
-    // // let db_path = get_temporary_directory_path();
-    // let db_path = PathBuf::from("/tmp/haha");
-    // let bc = Bitcask::open(&db_path, BitcaskOptions::default()).unwrap();
-    // bc.put("k1".into(), "value1".as_bytes()).unwrap();
-    // bc.put("k2".into(), "value2".as_bytes()).unwrap();
-    // bc.put("k3".into(), "value3".as_bytes()).unwrap();
-    // bc.delete(&"k1".into()).unwrap();
-    // bc.delete(&"k2".into()).unwrap();
-    // bc.delete(&"k3".into()).unwrap();
-
-    // bc.merge().unwrap();
-
-    // let stats = bc.stats().unwrap();
-    // assert_eq!(0, stats.total_data_size_in_bytes);
-    // assert_eq!(1, stats.number_of_data_files);
-    // assert_eq!(0, stats.number_of_keys);
+fn test_transform() {
+    let pattern = TransformTestPattern::new("tests/resources/transform_test_case");
+    run_test(&pattern).unwrap();
 }
