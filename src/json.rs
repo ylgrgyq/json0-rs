@@ -7,6 +7,7 @@ use crate::{
     path::{Path, PathElement},
 };
 
+use log::debug;
 use serde_json::Value;
 
 trait Routable {
@@ -277,7 +278,8 @@ impl Transformer {
                 operation.get(0).unwrap(),
                 TransformSide::RIGHT,
             )?;
-            return Ok((vec![a].into(), vec![b].into()));
+            
+            return Ok((a.into(), b.into()));
         }
 
         self.transform_matrix(operation.clone(), base_operation.clone())
@@ -374,6 +376,7 @@ impl Transformer {
                 out_b.push(o);
             }
         }
+        
         Ok((ops, out_b.into()))
     }
 
@@ -389,14 +392,12 @@ impl Transformer {
             match base {
                 Some(b) => {
                     let backup = op.clone();
-                    let a = self.transform_component(op, &b, TransformSide::LEFT)?;
-                    let b = self.transform_component(b, &backup, TransformSide::RIGHT)?;
-                    base = b.not_noop();
-                    if let Operator::Noop() = a.operator {
-                        continue;
-                    }
+                    let mut a = self.transform_component(op, &b, TransformSide::LEFT)?;
+                    let mut b = self.transform_component(b, &backup, TransformSide::RIGHT)?;
+                    assert!(b.len() == 1);
+                    base = b.pop();
 
-                    out.push(a);
+                    out.append(&mut a);
                 }
                 None => {
                     out.push(op.clone());
@@ -404,6 +405,7 @@ impl Transformer {
                 }
             }
         }
+
         Ok((out.into(), base))
     }
 
@@ -412,13 +414,13 @@ impl Transformer {
         new_op: OperationComponent,
         base_op: &OperationComponent,
         side: TransformSide,
-    ) -> Result<OperationComponent> {
+    ) -> Result<Vec<OperationComponent>> {
         let mut new_op = new_op;
 
         let max_common_path = base_op.path.max_common_path(&new_op.path);
         if max_common_path.is_empty() {
             // new_op and base_op does not have common path
-            return Ok(new_op);
+            return Ok(vec![new_op]);
         }
 
         let new_operate_path = new_op.operate_path();
@@ -429,7 +431,7 @@ impl Transformer {
             // common path must be equal to new_op's or base_op's operate path
             // or base_op and new_op is operating on orthogonal value
             // they don't need transform
-            return Ok(new_op);
+            return Ok(vec![new_op]);
         }
 
         // such as:
@@ -441,7 +443,7 @@ impl Transformer {
             if new_op.path.is_prefix_of(&base_op.path) {
                 new_op.consume(&max_common_path, &base_op)?;
             }
-            return Ok(new_op);
+            return Ok(vec![new_op]);
         }
 
         // from here, base_op's path is shorter or equal to new_op, such as:
@@ -457,13 +459,13 @@ impl Transformer {
                 if base_op_is_prefix {
                     if same_operand && side == TransformSide::LEFT {
                         if let Operator::ListReplace(new_li, _) = &new_op.operator {
-                            return Ok(OperationComponent::new(
+                            return Ok(vec![OperationComponent::new(
                                 new_op.path,
                                 Operator::ListReplace(new_li.clone(), li_v.clone()),
-                            ));
+                            )]);
                         }
                     }
-                    return Ok(new_op.noop());
+                    return Ok(vec![]);
                 }
             }
             Operator::ListInsert(_) => {
@@ -472,7 +474,7 @@ impl Transformer {
                         if side == TransformSide::RIGHT {
                             new_op.increase_last_index_path();
                         }
-                        return Ok(new_op);
+                        return Ok(vec![new_op]);
                     }
                 }
 
@@ -493,7 +495,7 @@ impl Transformer {
                     if same_operand {
                         if base_op_is_prefix {
                             // base_op deleted the thing we're trying to move
-                            return Ok(new_op.noop());
+                            return Ok(vec![]);
                         }
                         let to = lm.into();
                         if base_op_operate_path < &to
@@ -509,55 +511,62 @@ impl Transformer {
                 } else if base_op_is_prefix {
                     if !same_operand {
                         // we're below the deleted element, so -> noop
-                        return Ok(new_op.noop());
+                        return Ok(vec![]);
                     }
                     if let Operator::ListDelete(_) = new_op.operator {
                         // we're trying to delete the same element, -> noop
-                        return Ok(new_op.noop());
+                        return Ok(vec![]);
                     }
                     if let Operator::ListReplace(li, _) = new_op.operator {
                         // we're replacing, they're deleting. we become an insert.
-                        return Ok(OperationComponent::new(
+                        return Ok(vec![OperationComponent::new(
                             new_op.path.clone(),
                             Operator::ListInsert(li.clone()),
-                        ));
+                        )]);
                     }
                 }
             }
             Operator::ObjectReplace(oi, _) => {
                 if base_op_is_prefix {
                     if !same_operand {
-                        return Ok(new_op.noop());
+                        return Ok(vec![]);
                     }
 
                     match &new_op.operator {
                         Operator::ObjectReplace(new_oi, _) | Operator::ObjectInsert(new_oi) => {
                             if side == TransformSide::RIGHT {
-                                return Ok(new_op.noop());
+                                return Ok(vec![]);
                             }
-                            return Ok(OperationComponent {
+                            return Ok(vec![OperationComponent {
                                 path: new_op.path.clone(),
                                 operator: Operator::ListReplace(new_oi.clone(), oi.clone()),
-                            });
+                            }]);
                         }
                         _ => {
-                            return Ok(new_op.noop());
+                            return Ok(vec![]);
                         }
                     }
                 }
             }
             Operator::ObjectInsert(base_oi) => {
                 if base_op_is_prefix {
-                    if let Operator::ObjectReplace(new_oi, _) | Operator::ObjectInsert(new_oi) =
+                    if let Operator::ObjectReplace(_, _) | Operator::ObjectInsert(_) =
                         &new_op.operator
                     {
                         if side == TransformSide::LEFT {
-                            return Ok(OperationComponent {
-                                path: new_op.path.clone(),
-                                operator: Operator::ObjectReplace(new_oi.clone(), base_oi.clone()),
-                            });
+                            // Here, we are different from original json0
+                            // eg: new_op = [{"p": ["p1", "p2"],"oi": "v1"}], base_op = [{"p": ["p1"],"oi": "v2"}]
+                            // after execution of these op, the result should be {"p1":{"p2":"v1"}}, so new_op after left transform
+                            // is [{"p": ["p1"],"od": "v2"}, {"p": ["p1", "p2"],"oi": "v1"}]
+                            // but original json0 is [{"p": ["p1", "p2"],"od": "v2"}, {"p": ["p1", "p2"],"oi": "v1"}]
+                            return Ok(vec![
+                                OperationComponent {
+                                    path: base_op.path.clone(),
+                                    operator: Operator::ObjectDelete(base_oi.clone()),
+                                },
+                                new_op]);
                         } else {
-                            return Ok(new_op.noop());
+                            return Ok(vec![]);
                         }
                     }
                 }
@@ -565,17 +574,17 @@ impl Transformer {
             Operator::ObjectDelete(_) => {
                 if base_op_is_prefix {
                     if !same_operand {
-                        return Ok(new_op.noop());
+                        return Ok(vec![]);
                     }
                     if let Operator::ObjectReplace(new_oi, _) | Operator::ObjectInsert(new_oi) =
                         &new_op.operator
                     {
-                        return Ok(OperationComponent {
+                        return Ok(vec![OperationComponent {
                             path: new_op.path.clone(),
                             operator: Operator::ObjectInsert(new_oi.clone()),
-                        });
+                        }]);
                     } else {
-                        return Ok(new_op.noop());
+                        return Ok(vec![]);
                     }
                 }
             }
@@ -594,7 +603,7 @@ impl Transformer {
                                             .path
                                             .replace(new_operate_path.len(), other_to.clone());
                                     } else {
-                                        return Ok(new_op.noop());
+                                        return Ok(vec![]);
                                     }
                                 } else {
                                     let n_lm = *new_op_lm;
@@ -637,7 +646,7 @@ impl Transformer {
                                     }
                                 }
                             }
-                            return Ok(new_op);
+                            return Ok(vec![new_op]);
                         }
                         Operator::ListInsert(_) => {
                             let from = base_op.path.get(new_operate_path.len()).unwrap();
@@ -649,7 +658,7 @@ impl Transformer {
                             if &p > to {
                                 new_op.increase_last_index_path();
                             }
-                            return Ok(new_op);
+                            return Ok(vec![new_op]);
                         }
                         _ => {}
                     }
@@ -673,7 +682,7 @@ impl Transformer {
             _ => {}
         }
 
-        Ok(new_op)
+        Ok(vec![new_op])
     }
 }
 
@@ -821,6 +830,22 @@ mod tests {
             json.to_string(),
             r#"{"level1":{"level2":{"level3":[1,{"level4":[3,4]}]}}}"#
         );
+    }
+
+    #[test]
+    fn test_object_insert2() {
+        let mut json = JSON::from_str(r#"{}"#).unwrap();
+        // insert to empty object
+        let operation_comp: OperationComponent =
+            r#"{"p":["p1"], "oi":"v2"}"#.try_into().unwrap();
+        json.apply(vec![operation_comp.into()]).unwrap();
+        assert_eq!(json.to_string(), r#"{"p1":"v2"}"#);
+
+        let operation_comp: OperationComponent =
+            r#"{"p": ["p1", "p2"],"oi": "v1"}"#.try_into().unwrap();
+        json.apply(vec![operation_comp.into()]).unwrap();
+        assert_eq!(json.to_string(), r#"{"p1":"v2"}"#);
+        
     }
 
     #[test]

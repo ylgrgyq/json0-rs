@@ -1,8 +1,9 @@
-use log::debug;
+use log::{debug, info};
 use my_json0::error::{JsonError, Result};
 use my_json0::json::Transformer;
 use my_json0::operation::Operation;
 use serde_json::Value;
+use std::fmt::Display;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
@@ -56,13 +57,22 @@ struct TransformTest {
 
 impl Test<Transformer> for TransformTest {
     fn test(&self, executor: &Transformer) {
-        debug!("execute test {:?} {:?}", self.input_left, self.input_right);
+        info!("execute test {} {}", self.input_left, self.input_right);
 
         let (l, r) = executor
             .transform(&self.input_left, &self.input_right)
             .unwrap();
         assert_eq!(self.result_left, l);
         assert_eq!(self.result_right, r);
+    }
+}
+
+impl Display for TransformTest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!(
+            "left: {}\nright: {}\nrleft: {}\nrRight: {}",
+            self.input_left, self.input_right, self.result_left, self.result_right
+        ))
     }
 }
 
@@ -92,7 +102,7 @@ impl<'a> TestPattern<TransformTest, Transformer> for TransformTestPattern<'a> {
                             result_left,
                             result_right,
                         };
-                        debug!("load test {:?}", &test);
+                        debug!("load test:\n{}", &test);
                         return Ok(Some(test));
                     }
                 }

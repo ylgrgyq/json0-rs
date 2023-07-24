@@ -1,3 +1,5 @@
+use std::fmt::{format, Display};
+
 use serde_json::Value;
 
 use crate::error::{JsonError, Result};
@@ -30,6 +32,15 @@ impl From<usize> for PathElement {
 impl From<String> for PathElement {
     fn from(k: String) -> Self {
         PathElement::Key(k)
+    }
+}
+
+impl Display for PathElement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PathElement::Index(i) => f.write_fmt(format_args!("{}", i)),
+            PathElement::Key(k) => f.write_str(k.as_str()),
+        }
     }
 }
 
@@ -114,7 +125,7 @@ impl Path {
     }
 
     pub fn replace(&mut self, index: usize, path_elem: PathElement) -> Option<PathElement> {
-        if let Some(o) = self.paths.get(index) {
+        if let Some(_) = self.paths.get(index) {
             let o = std::mem::replace(&mut self.paths[index], path_elem);
             return Some(o);
         }
@@ -186,6 +197,20 @@ impl Path {
         Path {
             paths: self.paths[1..].to_vec(),
         }
+    }
+}
+
+impl Display for Path {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!(
+            "[{}]",
+            self.paths
+                .iter()
+                .map(|p| format!("{}", p))
+                .collect::<Vec<String>>()
+                .join(", ")
+        ))?;
+        Ok(())
     }
 }
 

@@ -1,4 +1,5 @@
 use std::{
+    fmt::Display,
     mem,
     ops::{Deref, DerefMut},
     vec,
@@ -131,6 +132,26 @@ impl TryFrom<Value> for Operator {
                 "Operator can only be parsed from JSON Object".into(),
             )),
         }
+    }
+}
+
+impl Display for Operator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s: String = match self {
+            Operator::Noop() => "".into(),
+            Operator::AddNumber(n) => format!("na: {}", n.to_string()),
+            Operator::ListInsert(i) => format!("li: {}", i.to_string()),
+            Operator::ListDelete(d) => format!("ld: {}", d.to_string()),
+            Operator::ListReplace(i, d) => format!("li: {}, ld: {}", i.to_string(), d.to_string()),
+            Operator::ListMove(m) => format!("lm: {}", m.to_string()),
+            Operator::ObjectInsert(i) => format!("oi: {}", i.to_string()),
+            Operator::ObjectDelete(d) => format!("od: {}", d.to_string()),
+            Operator::ObjectReplace(i, d) => {
+                format!("oi: {}, od: {}", i.to_string(), d.to_string())
+            }
+        };
+        f.write_str(&s)?;
+        Ok(())
     }
 }
 
@@ -355,6 +376,14 @@ impl TryFrom<Value> for OperationComponent {
     }
 }
 
+impl Display for OperationComponent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{{\"p\": {}, {}}}", self.path, self.operator))?;
+
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Operation {
     operations: Vec<OperationComponent>,
@@ -424,5 +453,15 @@ impl TryFrom<Value> for Operation {
             }
         }
         Ok(Operation { operations })
+    }
+}
+
+impl Display for Operation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for op in self.operations.iter() {
+            f.write_str(&op.to_string())?;
+        }
+
+        Ok(())
     }
 }
