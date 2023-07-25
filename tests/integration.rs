@@ -17,19 +17,21 @@ where
     Ok(io::BufReader::new(file).lines())
 }
 
-fn read_json_value<P>(file_name: P) -> Result<Vec<Value>>
+fn read_json_value<P>(file_name: P) -> Result<Vec<(usize, Value)>>
 where
     P: AsRef<Path>,
 {
     let mut out = vec![];
+    let mut line_number = 1;
     if let Ok(lines) = read_lines(file_name) {
         for line in lines {
             if let Ok(v) = line {
+                line_number += 1;
                 if !v.is_empty() && !v.starts_with("#") {
                     let val = serde_json::from_str(&v).map_err(|e| {
                         JsonError::UnexpectedError(format!("parse line: {} failed. {}", v, e))
                     })?;
-                    out.push(val);
+                    out.push((line_number, val));
                 }
             }
         }
@@ -42,13 +44,14 @@ trait Test<E> {
 }
 
 trait TestPattern<T: Test<E>, E> {
-    fn load<I: Iterator<Item = Operation>>(&self, input: &mut I) -> Result<Option<T>>;
+    fn load<I: Iterator<Item = (usize, Operation)>>(&self, input: &mut I) -> Result<Option<T>>;
     fn executor(&self) -> &E;
     fn test_input_path(&self) -> PathBuf;
 }
 
 #[derive(Debug)]
 struct TransformTest {
+    line: usize,
     input_left: Operation,
     input_right: Operation,
     result_left: Operation,
@@ -57,7 +60,10 @@ struct TransformTest {
 
 impl Test<Transformer> for TransformTest {
     fn test(&self, executor: &Transformer) {
-        info!("execute test {} {}", self.input_left, self.input_right);
+        info!(
+            "execute test transform at line: {} left: {} right: {}",
+            self.line, self.input_left, self.input_right
+        );
 
         let (l, r) = executor
             .transform(&self.input_left, &self.input_right)
@@ -91,18 +97,22 @@ impl<'a> TransformTestPattern<'a> {
 }
 
 impl<'a> TestPattern<TransformTest, Transformer> for TransformTestPattern<'a> {
-    fn load<I: Iterator<Item = Operation>>(&self, input: &mut I) -> Result<Option<TransformTest>> {
-        if let Some(input_left) = input.next() {
-            if let Some(input_right) = input.next() {
-                if let Some(result_left) = input.next() {
-                    if let Some(result_right) = input.next() {
+    fn load<I: Iterator<Item = (usize, Operation)>>(
+        &self,
+        input: &mut I,
+    ) -> Result<Option<TransformTest>> {
+        if let Some((line, input_left)) = input.next() {
+            if let Some((_, input_right)) = input.next() {
+                if let Some((_, result_left)) = input.next() {
+                    if let Some((_, result_right)) = input.next() {
                         let test = TransformTest {
+                            line,
                             input_left,
                             input_right,
                             result_left,
                             result_right,
                         };
-                        debug!("load test:\n{}", &test);
+                        debug!("load test at line: {}\n{}", line, &test);
                         return Ok(Some(test));
                     }
                 }
@@ -133,15 +143,17 @@ fn run_test<T: Test<E>, E, P: Sized + TestPattern<T, E>>(pattern: &P) -> Result<
     let mut iter = json_values
         .into_iter()
         .map(|v| {
-            let v_str = v.to_string();
-            v.try_into().map_err(|e| {
-                JsonError::InvalidOperation(format!(
-                    "{} can not be parsed to Operation due to error {}",
-                    v_str, e
-                ))
-            })
+            let v_str = v.1.to_string();
+            v.1.try_into()
+                .map_err(|e| {
+                    JsonError::InvalidOperation(format!(
+                        "{} can not be parsed to Operation due to error {}",
+                        v_str, e
+                    ))
+                })
+                .map(|op| (v.0, op))
         })
-        .collect::<Result<Vec<Operation>>>()?
+        .collect::<Result<Vec<(usize, Operation)>>>()?
         .into_iter();
     loop {
         if let Some(test) = pattern.load(&mut iter)? {
