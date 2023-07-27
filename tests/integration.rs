@@ -22,7 +22,7 @@ where
     P: AsRef<Path>,
 {
     let mut out = vec![];
-    let mut line_number = 1;
+    let mut line_number = 0;
     if let Ok(lines) = read_lines(file_name) {
         for line in lines {
             if let Ok(v) = line {
@@ -68,8 +68,8 @@ impl Test<Transformer> for TransformTest {
         let (l, r) = executor
             .transform(&self.input_left, &self.input_right)
             .unwrap();
-        assert_eq!(self.result_left, l);
-        assert_eq!(self.result_right, r);
+        assert_eq!(self.result_left, l, "left transform failed");
+        assert_eq!(self.result_right, r, "right transform failed");
     }
 }
 

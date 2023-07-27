@@ -7,7 +7,7 @@ use crate::{
     path::{Path, PathElement},
 };
 
-use log::debug;
+use log::{debug, info};
 use serde_json::Value;
 
 trait Routable {
@@ -550,10 +550,17 @@ impl Transformer {
             }
             Operator::ObjectInsert(base_oi) => {
                 if base_op_is_prefix {
-                    if let Operator::ObjectReplace(_, _) | Operator::ObjectInsert(_) =
+                    if let Operator::ObjectReplace(new_oi, _) | Operator::ObjectInsert(new_oi) =
                         &new_op.operator
                     {
                         if side == TransformSide::LEFT {
+                            if same_operand {
+                                return Ok(vec![
+                                    OperationComponent {
+                                        path: base_op.path.clone(),
+                                        operator: Operator::ObjectReplace(new_oi.clone(), base_oi.clone()),
+                                    }]);    
+                            }
                             // Here, we are different from original json0
                             // eg: new_op = [{"p": ["p1", "p2"],"oi": "v1"}], base_op = [{"p": ["p1"],"oi": "v2"}]
                             // after execution of these op, the result should be {"p1":{"p2":"v1"}}, so new_op after left transform
