@@ -1,3 +1,5 @@
+use log::info;
+
 use crate::common::Validation;
 use crate::error::{JsonError, Result};
 use crate::operation::{Operation, OperationComponent, Operator};
@@ -338,6 +340,10 @@ impl Transformer {
                         } else {
                             return Ok(vec![]);
                         }
+                    } else if let Operator::ObjectDelete(_) = &new_op.operator {
+                        if same_operand && side == TransformSide::RIGHT {
+                            return Ok(vec![]);
+                        }
                     }
                 }
             }
@@ -349,10 +355,14 @@ impl Transformer {
                     if let Operator::ObjectReplace(new_oi, _) | Operator::ObjectInsert(new_oi) =
                         &new_op.operator
                     {
-                        return Ok(vec![OperationComponent {
-                            path: new_op.path.clone(),
-                            operator: Operator::ObjectInsert(new_oi.clone()),
-                        }]);
+                        if side == TransformSide::LEFT {
+                            return Ok(vec![OperationComponent {
+                                path: new_op.path.clone(),
+                                operator: Operator::ObjectInsert(new_oi.clone()),
+                            }]);
+                        } else {
+                            return Ok(vec![]);
+                        }
                     } else {
                         return Ok(vec![]);
                     }

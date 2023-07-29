@@ -158,11 +158,13 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
                 self.insert(k.clone(), v.clone());
                 Ok(())
             }
-            Operator::ObjectDelete(delete_v) => {
-                if let Some(target_v) = target_value {
-                    if target_v.eq(&delete_v) {
+            Operator::ObjectDelete(_) => {
+                if let Some(_) = target_value {
+                    // we don't check the equality of the values
+                    // because OT is hard to implement
+                    // if target_v.eq(&delete_v) {
                         self.remove(k);
-                    }
+                    // }
                 }
                 Ok(())
             }
@@ -210,11 +212,13 @@ impl Appliable for Vec<serde_json::Value> {
                 }
                 Ok(())
             }
-            Operator::ListDelete(delete_v) => {
-                if let Some(target_v) = target_value {
-                    if target_v.eq(&delete_v) {
+            Operator::ListDelete(_) => {
+                if let Some(_) = target_value {
+                    // we don't check the equality of the values
+                    // because OT is hard to implement
+                    // if target_v.eq(&delete_v) {
                         self.remove(*index);
-                    }
+                    // }
                 }
                 Ok(())
             }
@@ -399,6 +403,7 @@ mod tests {
         let operation_comp: OperationComponent =
             r#"{"p": ["p1", "p2"],"oi": "v1"}"#.try_into().unwrap();
         json.apply(vec![operation_comp.into()]).unwrap();
+        info!("asdf {}", json.to_string());
         assert_eq!(json.to_string(), r#"{"p1":"v2"}"#);
         
     }
