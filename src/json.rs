@@ -6,6 +6,7 @@ use crate::{
     path::Path,
 };
 
+use log::info;
 use serde_json::Value;
 
 trait Routable {
@@ -131,6 +132,7 @@ impl Appliable for Value {
                 }
             },
             _ => {
+                info!("asdf {:?} {:?} {:?}", self, paths, operator);
                 return Err(JsonError::InvalidOperation(
                     "Operation can only apply on array or object".into(),
                 ));

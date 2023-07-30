@@ -5,6 +5,21 @@ use crate::error::{JsonError, Result};
 use crate::operation::{Operation, OperationComponent, Operator};
 use crate::path::PathElement;
 
+fn is_equivalent_to_noop(op: &OperationComponent) -> bool {
+    match &op.operator {
+        Operator::Noop() => true,
+        Operator::AddNumber(_)
+        | Operator::ListInsert(_)
+        | Operator::ListDelete(_)
+        | Operator::ObjectInsert(_)
+        | Operator::ObjectDelete(_) => false,
+        Operator::ListReplace(new_v, old_v) | Operator::ObjectReplace(new_v, old_v) => {
+            new_v.eq(old_v)
+        }
+        Operator::ListMove(_) => false,
+    }
+}
+
 #[derive(PartialEq)]
 pub enum TransformSide {
     LEFT,
@@ -185,6 +200,10 @@ impl Transformer {
             return Ok(vec![new_op]);
         }
 
+        if is_equivalent_to_noop(&new_op) || is_equivalent_to_noop(base_op) {
+            return Ok(vec![new_op]);
+        }
+
         let new_operate_path = new_op.operate_path();
         let base_operate_path = base_op.operate_path();
         if max_common_path.len() < new_operate_path.len()
@@ -203,7 +222,12 @@ impl Transformer {
         if base_operate_path.len() > new_operate_path.len() {
             // if base_op's path is longger and contains new_op's path, new_op should include base_op's effect
             if new_op.path.is_prefix_of(&base_op.path) {
+                info!("consume {:?} {:?} {:?}", new_op, max_common_path, base_op);
                 new_op.consume(&max_common_path, &base_op)?;
+                info!(
+                    "after consume {:?} {:?} {:?}",
+                    new_op, max_common_path, base_op
+                );
             }
             return Ok(vec![new_op]);
         }
@@ -341,7 +365,7 @@ impl Transformer {
                             return Ok(vec![]);
                         }
                     } else if let Operator::ObjectDelete(_) = &new_op.operator {
-                        if same_operand && side == TransformSide::RIGHT {
+                        if side == TransformSide::RIGHT {
                             return Ok(vec![]);
                         }
                     }

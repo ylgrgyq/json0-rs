@@ -5,6 +5,7 @@ use std::{
     vec,
 };
 
+use log::info;
 use serde_json::{Map, Value};
 
 use crate::{
@@ -287,7 +288,9 @@ impl OperationComponent {
             | Operator::ObjectDelete(v)
             | Operator::ObjectReplace(_, v) => {
                 let (_, p2) = op.path.split_at(common_path.len());
+                info!("asdf {} {} {}", v, p2, op.operator);
                 v.apply(p2, op.operator.clone())?;
+                info!("asdf2 {}", v);
             }
             _ => {}
         }
