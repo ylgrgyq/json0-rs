@@ -8,6 +8,7 @@ name = "integration"
 
 [dependencies]
 crc = "3.0.0"
+itertools = "0.11.0"
 serde_json = "1.0.96"
 serde = "1.0.164"
 walkdir = "2.3.2"

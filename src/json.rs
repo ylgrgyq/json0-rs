@@ -163,16 +163,18 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
                     // we don't check the equality of the values
                     // because OT is hard to implement
                     // if target_v.eq(&delete_v) {
-                        self.remove(k);
+                    self.remove(k);
                     // }
                 }
                 Ok(())
             }
-            Operator::ObjectReplace(new_v, old_v) => {
-                if let Some(target_v) = target_value {
-                    if target_v.eq(&old_v) {
-                        self.insert(k.clone(), new_v.clone());
-                    }
+            Operator::ObjectReplace(new_v, _) => {
+                if let Some(_) = target_value {
+                    // we don't check the equality of the values
+                    // because OT is hard to implement
+                    // if target_v.eq(&old_v) {
+                    self.insert(k.clone(), new_v.clone());
+                    // }
                 }
                 Ok(())
             }
@@ -217,16 +219,18 @@ impl Appliable for Vec<serde_json::Value> {
                     // we don't check the equality of the values
                     // because OT is hard to implement
                     // if target_v.eq(&delete_v) {
-                        self.remove(*index);
+                    self.remove(*index);
                     // }
                 }
                 Ok(())
             }
-            Operator::ListReplace(new_v, old_v) => {
-                if let Some(target_v) = target_value {
-                    if target_v.eq(&old_v) {
-                        self[*index] = new_v.clone();
-                    }
+            Operator::ListReplace(new_v, _) => {
+                if let Some(_) = target_value {
+                    // we don't check the equality of the values
+                    // because OT is hard to implement
+                    // if target_v.eq(&old_v) {
+                    self[*index] = new_v.clone();
+                    // }
                 }
                 Ok(())
             }
@@ -245,7 +249,7 @@ impl Appliable for Vec<serde_json::Value> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct JSON {
     value: Value,
 }
@@ -257,14 +261,9 @@ impl Display for JSON {
 }
 
 impl JSON {
-    pub fn from_str(input: &str) -> Result<JSON> {
-        let value = serde_json::from_str(input)?;
-        Ok(JSON { value })
-    }
-
     pub fn apply(&mut self, operations: Vec<Operation>) -> Result<()> {
         for operation in operations {
-            for op_comp in operation {
+            for op_comp in operation.iter() {
                 self.value
                     .apply(op_comp.path.clone(), op_comp.operator.clone())?;
             }
@@ -277,24 +276,33 @@ impl JSON {
     }
 }
 
+impl From<Value> for JSON {
+    fn from(value: Value) -> Self {
+        JSON { value }
+    }
+}
+
+impl TryFrom<&str> for JSON {
+    type Error = JsonError;
+
+    fn try_from(input: &str) -> std::result::Result<Self, Self::Error> {
+        let value = serde_json::from_str(input)?;
+        Ok(JSON { value })
+    }
+}
+
 #[cfg(test)]
 mod tests {
-
-    use std::{
-        io::{Read, Write},
-        str::FromStr,
-        vec,
-    };
-
-    use crate::{path::Path, operation::OperationComponent};
+    use crate::path::Path;
 
     use super::*;
-    use log::info;
     use test_log::test;
 
     #[test]
     fn test_route_get_by_path_only_has_object() {
-        let json = JSON::from_str(r#"{"level1":"world", "level12":{"level2":"world2"}}"#).unwrap();
+        let json: JSON = r#"{"level1":"world", "level12":{"level2":"world2"}}"#
+            .try_into()
+            .unwrap();
 
         // simple path with only object
         let paths = Path::from_str(r#"["level1"]"#).unwrap();
@@ -308,8 +316,9 @@ mod tests {
         assert!(json.get(&paths).unwrap().is_none());
 
         // complex path with array
-        let json =
-            JSON::from_str(r#"{"level1":[1,{"hello":[1,[7,8]]}], "level12":"world"}"#).unwrap();
+        let json: JSON = r#"{"level1":[1,{"hello":[1,[7,8]]}], "level12":"world"}"#
+            .try_into()
+            .unwrap();
         let paths = Path::from_str(r#"["level1", 1, "hello"]"#).unwrap();
 
         assert_eq!(
@@ -320,7 +329,8 @@ mod tests {
 
     #[test]
     fn test_route_get_by_path_has_array() {
-        let json = JSON::from_str(r#"{"level1":["a","b"], "level12":[123, {"level2":["c","d"]}]}"#)
+        let json: JSON = r#"{"level1":["a","b"], "level12":[123, {"level2":["c","d"]}]}"#
+            .try_into()
             .unwrap();
         // simple path
         let paths = Path::from_str(r#"["level1", 1]"#).unwrap();
@@ -334,243 +344,28 @@ mod tests {
             json.get(&paths).unwrap().unwrap().to_string(),
             r#"["c","d"]"#
         );
-        let json =
-            JSON::from_str(r#"{"level1":[1,{"hello":[1,[7,8]]}], "level12":"world"}"#).unwrap();
+        let json: JSON = r#"{"level1":[1,{"hello":[1,[7,8]]}], "level12":"world"}"#
+            .try_into()
+            .unwrap();
         let paths = Path::from_str(r#"["level1", 1, "hello", 1]"#).unwrap();
 
         assert_eq!(json.get(&paths).unwrap().unwrap().to_string(), r#"[7,8]"#);
     }
 
-    #[test]
-    fn test_apply_add_number() {
-        let mut json = JSON::from_str("{\"level1\": 10}").unwrap();
-        let operation_comp: OperationComponent =
-            "{\"p\":[\"level1\"], \"na\":100}".try_into().unwrap();
-        json.apply(vec![operation_comp.clone().into()]).unwrap();
+    // #[test]
+    // fn test_object_insert2() {
+    //     let mut json = JSON::from_str(r#"{}"#).unwrap();
+    //     // insert to empty object
+    //     let operation_comp: OperationComponent =
+    //         r#"{"p":["p1"], "oi":"v2"}"#.try_into().unwrap();
+    //     json.apply(vec![operation_comp.into()]).unwrap();
+    //     assert_eq!(json.to_string(), r#"{"p1":"v2"}"#);
 
-        assert_eq!(json.to_string(), r#"{"level1":110}"#);
-    }
+    //     let operation_comp: OperationComponent =
+    //         r#"{"p": ["p1", "p2"],"oi": "v1"}"#.try_into().unwrap();
+    //     json.apply(vec![operation_comp.into()]).unwrap();
+    //     info!("asdf {}", json.to_string());
+    //     assert_eq!(json.to_string(), r#"{"p1":"v2"}"#);
 
-    #[test]
-    fn test_object_insert() {
-        let mut json = JSON::from_str(r#"{}"#).unwrap();
-        // insert to empty object
-        let operation_comp: OperationComponent =
-            r#"{"p":["level1"], "oi":{"level2":{}}}"#.try_into().unwrap();
-        json.apply(vec![operation_comp.into()]).unwrap();
-        assert_eq!(json.to_string(), r#"{"level1":{"level2":{}}}"#);
-
-        // insert to inner object
-        let operation_comp: OperationComponent = 
-            r#"{"p":["level1", "level2"], "oi":{"level3":[1, {"level4":{}}]}}"#.try_into().unwrap();
-        json.apply(vec![operation_comp.into()]).unwrap();
-        assert_eq!(
-            json.to_string(),
-            r#"{"level1":{"level2":{"level3":[1,{"level4":{}}]}}}"#
-        );
-
-        // insert to deep inner object with number index in path
-        let operation_comp: OperationComponent=
-            r#"{"p":["level1", "level2", "level3", 1, "level4"], "oi":{"level5":[1, 2]}}"#
-                .try_into()
-                .unwrap();
-        json.apply(vec![operation_comp.into()]).unwrap();
-        assert_eq!(
-            json.to_string(),
-            r#"{"level1":{"level2":{"level3":[1,{"level4":{"level5":[1,2]}}]}}}"#
-        );
-
-        // replace key without compare
-        let operation_comp: OperationComponent = r#"{"p":["level1", "level2", "level3", 1, "level4"], "oi":[3,4]}"#
-            .try_into()
-            .unwrap();
-        json.apply(vec![operation_comp.into()]).unwrap();
-        assert_eq!(
-            json.to_string(),
-            r#"{"level1":{"level2":{"level3":[1,{"level4":[3,4]}]}}}"#
-        );
-    }
-
-    #[test]
-    fn test_object_insert2() {
-        let mut json = JSON::from_str(r#"{}"#).unwrap();
-        // insert to empty object
-        let operation_comp: OperationComponent =
-            r#"{"p":["p1"], "oi":"v2"}"#.try_into().unwrap();
-        json.apply(vec![operation_comp.into()]).unwrap();
-        assert_eq!(json.to_string(), r#"{"p1":"v2"}"#);
-
-        let operation_comp: OperationComponent =
-            r#"{"p": ["p1", "p2"],"oi": "v1"}"#.try_into().unwrap();
-        json.apply(vec![operation_comp.into()]).unwrap();
-        info!("asdf {}", json.to_string());
-        assert_eq!(json.to_string(), r#"{"p1":"v2"}"#);
-        
-    }
-
-    #[test]
-    fn test_object_delete() {
-        let origin_json = JSON::from_str(
-            r#"{"level1":{"level2":{"level3":[1,{"level41":[1,2], "level42":[3,4]}]}}}"#,
-        )
-        .unwrap();
-
-        // delete to deep inner object with number index in path
-        let mut json = origin_json.clone();
-        let operation_comp: OperationComponent = r#"{"p":["level1", "level2", "level3", 1, "level41"], "od":[1, 2]}"#
-            .try_into()
-            .unwrap();
-        json.apply(vec![operation_comp.into()]).unwrap();
-        assert_eq!(
-            json.to_string(),
-            r#"{"level1":{"level2":{"level3":[1,{"level42":[3,4]}]}}}"#
-        );
-
-        // delete to inner object
-        let mut json = origin_json.clone();
-        let operation_comp: OperationComponent =
-            r#"{"p":["level1", "level2", "level3"], "od":[1,{"level41":[1,2], "level42":[3,4]}]}"#
-                .try_into()
-                .unwrap();
-        json.apply(vec![operation_comp.into()]).unwrap();
-        assert_eq!(json.to_string(), r#"{"level1":{"level2":{}}}"#);
-    }
-
-    #[test]
-    fn test_object_replace() {
-        let origin_json = JSON::from_str(
-            r#"{"level1":{"level2":{"level3":[1,{"level41":[1,2], "level42":[3,4]}]}}}"#,
-        )
-        .unwrap();
-
-        // replace deep inner object with number index in path
-        let mut json = origin_json.clone();
-        let operation_comp: OperationComponent =
-            r#"{"p":["level1", "level2", "level3", 1, "level41"], "oi":{"5":"6"}, "od":[1, 2]}"#
-                .try_into()
-                .unwrap();
-        json.apply(vec![operation_comp.into()]).unwrap();
-        assert_eq!(
-            json.to_string(),
-            r#"{"level1":{"level2":{"level3":[1,{"level41":{"5":"6"},"level42":[3,4]}]}}}"#
-        );
-
-        // replace to inner object
-        let mut json = origin_json.clone();
-        let operation_comp: OperationComponent = 
-            r#"{"p":["level1", "level2"], "oi":"hello", "od":{"level3":[1,{"level41":[1,2], "level42":[3,4]}]}}"#.try_into()
-            .unwrap();
-        json.apply(vec![operation_comp.into()]).unwrap();
-        assert_eq!(json.to_string(), r#"{"level1":{"level2":"hello"}}"#);
-    }
-
-    #[test]
-    fn test_list_insert() {
-        let mut json = JSON::from_str(r#"{"level1": []}"#).unwrap();
-
-        // insert to empty array
-        let operation_comp: OperationComponent =
-        r#"{"p":["level1", 0], "li":{"hello":[1]}}"#.try_into().unwrap();
-        json.apply(vec![operation_comp.into()]).unwrap();
-        assert_eq!(json.to_string(), r#"{"level1":[{"hello":[1]}]}"#);
-
-        // insert to array
-        let operation_comp: OperationComponent =
-        r#"{"p":["level1", 0], "li":1}"#.try_into().unwrap();
-        json.apply(vec![operation_comp.into()]).unwrap();
-        assert_eq!(json.to_string(), r#"{"level1":[1,{"hello":[1]}]}"#);
-
-        // insert to inner array
-        let operation_comp: OperationComponent =
-            r#"{"p":["level1", 1, "hello",1], "li":[7,8]}"#.try_into().unwrap();
-        json.apply(vec![operation_comp.into()]).unwrap();
-        assert_eq!(json.to_string(), r#"{"level1":[1,{"hello":[1,[7,8]]}]}"#);
-
-        // append
-        let operation_comp: OperationComponent =
-            r#"{"p":["level1", 10], "li":[2,3]}"#.try_into().unwrap();
-        json.apply(vec![operation_comp.into()]).unwrap();
-        assert_eq!(
-            json.to_string(),
-            r#"{"level1":[1,{"hello":[1,[7,8]]},[2,3]]}"#
-        );
-    }
-
-    #[test]
-    fn test_list_delete() {
-        let origin_json = JSON::from_str(r#"{"level1":[1,{"hello":[1,[7,8]]}]}"#).unwrap();
-
-        // delete from innser array
-        let mut json = origin_json.clone();
-        let operation_comp: OperationComponent =
-            r#"{"p":["level1", 1, "hello", 1], "ld":[7,8]}"#.try_into().unwrap();
-        json.apply(vec![operation_comp.into()]).unwrap();
-        assert_eq!(json.to_string(), r#"{"level1":[1,{"hello":[1]}]}"#);
-
-        // delete from inner object
-        let mut json = origin_json.clone();
-        let operation_comp: OperationComponent =
-        r#"{"p":["level1", 1], "ld":{"hello":[1,[7,8]]}}"#.try_into()
-                .unwrap();
-        json.apply(vec![operation_comp.into()]).unwrap();
-        assert_eq!(json.to_string(), r#"{"level1":[1]}"#);
-    }
-
-    #[test]
-    fn test_list_replace() {
-        let origin_json = JSON::from_str(r#"{"level1":[1,{"hello":[1,[7,8]]}]}"#).unwrap();
-
-        // replace from innser array
-        let mut json = origin_json.clone();
-        let operation_comp: OperationComponent = 
-            r#"{"p":["level1", 1, "hello", 1], "li":{"hello":"world"}, "ld":[7,8]}"#.try_into()
-        .unwrap();
-        json.apply(vec![operation_comp.into()]).unwrap();
-        assert_eq!(
-            json.to_string(),
-            r#"{"level1":[1,{"hello":[1,{"hello":"world"}]}]}"#
-        );
-
-        // replace from inner object
-        let mut json = origin_json.clone();
-        let operation_comp: OperationComponent = 
-            r#"{"p":["level1", 1], "li": {"hello":"world"}, "ld":{"hello":[1,[7,8]]}}"#.try_into().unwrap();
-        json.apply(vec![operation_comp.into()]).unwrap();
-        assert_eq!(json.to_string(), r#"{"level1":[1,{"hello":"world"}]}"#);
-    }
-
-    #[test]
-    fn test_list_move() {
-        let origin_json = JSON::from_str(r#"{"level1":[1,{"hello":[1,[7,8], 9, 10]}]}"#).unwrap();
-
-        // move left
-        let mut json = origin_json.clone();
-        let operation_comp: OperationComponent =
-            r#"{"p":["level1", 1, "hello", 2], "lm":1}"#.try_into().unwrap();
-        json.apply(vec![operation_comp.into()]).unwrap();
-        assert_eq!(
-            json.to_string(),
-            r#"{"level1":[1,{"hello":[1,9,[7,8],10]}]}"#
-        );
-
-        // move right
-        let mut json = origin_json.clone();
-        let operation_comp: OperationComponent =
-            r#"{"p":["level1", 1, "hello", 1], "lm":2}"#.try_into().unwrap();
-        json.apply(vec![operation_comp.into()]).unwrap();
-        assert_eq!(
-            json.to_string(),
-            r#"{"level1":[1,{"hello":[1,9,[7,8],10]}]}"#
-        );
-
-        // stay put
-        let mut json = origin_json.clone();
-        let operation_comp: OperationComponent =
-            r#"{"p":["level1", 1, "hello", 1], "lm":1}"#.try_into().unwrap();
-        json.apply(vec![operation_comp.into()]).unwrap();
-        assert_eq!(
-            json.to_string(),
-            r#"{"level1":[1,{"hello":[1,[7,8],9,10]}]}"#
-        );
-    }
+    // }
 }

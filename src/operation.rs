@@ -378,8 +378,7 @@ impl TryFrom<Value> for OperationComponent {
 
 impl Display for OperationComponent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{{\"p\": {}, {}}}", self.path, self.operator))?;
-
+        f.write_fmt(format_args!(r#"{{"p": {}, {}}}"#, self.path, self.operator))?;
         Ok(())
     }
 }
