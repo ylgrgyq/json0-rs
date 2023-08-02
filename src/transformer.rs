@@ -222,12 +222,7 @@ impl Transformer {
         if base_operate_path.len() > new_operate_path.len() {
             // if base_op's path is longger and contains new_op's path, new_op should include base_op's effect
             if new_op.path.is_prefix_of(&base_op.path) {
-                info!("consume {:?} {:?} {:?}", new_op, max_common_path, base_op);
                 new_op.consume(&max_common_path, &base_op)?;
-                info!(
-                    "after consume {:?} {:?} {:?}",
-                    new_op, max_common_path, base_op
-                );
             }
             return Ok(vec![new_op]);
         }
@@ -354,6 +349,7 @@ impl Transformer {
                             // after execution of these op, the result should be {"p1":{"p2":"v1"}}, so new_op after left transform
                             // is [{"p": ["p1"],"od": "v2"}, {"p": ["p1", "p2"],"oi": "v1"}]
                             // but original json0 is [{"p": ["p1", "p2"],"od": "v2"}, {"p": ["p1", "p2"],"oi": "v1"}]
+                            // the problem of original json0 is "v2" inserted by base_op is under path p1, not [p1, p2]
                             return Ok(vec![
                                 OperationComponent {
                                     path: base_op.path.clone(),

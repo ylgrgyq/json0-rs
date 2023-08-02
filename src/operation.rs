@@ -288,9 +288,9 @@ impl OperationComponent {
             | Operator::ObjectDelete(v)
             | Operator::ObjectReplace(_, v) => {
                 let (_, p2) = op.path.split_at(common_path.len());
-                info!("asdf {} {} {}", v, p2, op.operator);
-                v.apply(p2, op.operator.clone())?;
-                info!("asdf2 {}", v);
+                // v maybe cannot apply op.operator
+                // if that happen we do not consume op just leave self op
+                _ = v.apply(p2, op.operator.clone());
             }
             _ => {}
         }

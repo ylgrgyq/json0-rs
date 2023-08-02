@@ -132,7 +132,6 @@ impl Appliable for Value {
                 }
             },
             _ => {
-                info!("asdf {:?} {:?} {:?}", self, paths, operator);
                 return Err(JsonError::InvalidOperation(
                     "Operation can only apply on array or object".into(),
                 ));
@@ -353,21 +352,4 @@ mod tests {
 
         assert_eq!(json.get(&paths).unwrap().unwrap().to_string(), r#"[7,8]"#);
     }
-
-    // #[test]
-    // fn test_object_insert2() {
-    //     let mut json = JSON::from_str(r#"{}"#).unwrap();
-    //     // insert to empty object
-    //     let operation_comp: OperationComponent =
-    //         r#"{"p":["p1"], "oi":"v2"}"#.try_into().unwrap();
-    //     json.apply(vec![operation_comp.into()]).unwrap();
-    //     assert_eq!(json.to_string(), r#"{"p1":"v2"}"#);
-
-    //     let operation_comp: OperationComponent =
-    //         r#"{"p": ["p1", "p2"],"oi": "v1"}"#.try_into().unwrap();
-    //     json.apply(vec![operation_comp.into()]).unwrap();
-    //     info!("asdf {}", json.to_string());
-    //     assert_eq!(json.to_string(), r#"{"p1":"v2"}"#);
-
-    // }
 }
