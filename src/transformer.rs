@@ -238,15 +238,22 @@ impl Transformer {
         match &base_op.operator {
             Operator::ListReplace(li_v, _) => {
                 if base_op_is_prefix {
-                    if same_operand && side == TransformSide::LEFT {
-                        if let Operator::ListReplace(new_li, _) = &new_op.operator {
+                    if !same_operand {
+                        return Ok(vec![]);
+                    }
+                    if let Operator::ListReplace(new_li, _) = &new_op.operator {
+                        if side == TransformSide::LEFT {
                             return Ok(vec![OperationComponent::new(
                                 new_op.path,
                                 Operator::ListReplace(new_li.clone(), li_v.clone()),
                             )]);
+                        } else {
+                            return Ok(vec![]);
                         }
                     }
-                    return Ok(vec![]);
+                    if let Operator::ListDelete(_) = &new_op.operator {
+                        return Ok(vec![]);
+                    }
                 }
             }
             Operator::ListInsert(_) => {

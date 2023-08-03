@@ -38,86 +38,86 @@
 # object delete
 
 ## delete to deep inner object with number index in path
-{"level1":{"level2":{"level3":[1,{"level41":[1,2], "level42":[3,4]}]}}}
-[{"p":["level1", "level2", "level3", 1, "level41"], "od":[1, 2]}]
-{"level1":{"level2":{"level3":[1,{"level42":[3,4]}]}}}
+{"p1":{"p2":{"p3":[1,{"level41":[1,2], "level42":[3,4]}]}}}
+[{"p":["p1", "p2", "p3", 1, "level41"], "od":[1, 2]}]
+{"p1":{"p2":{"p3":[1,{"level42":[3,4]}]}}}
 
 ## delete to inner object
-{"level1":{"level2":{"level3":[1,{"level42":[3,4]}]}}}
-[{"p":["level1", "level2", "level3"], "od":[1,{"level41":[1,2], "level42":[3,4]}]}]
-{"level1":{"level2":{}}}
+{"p1":{"p2":{"p3":[1,{"level42":[3,4]}]}}}
+[{"p":["p1", "p2", "p3"], "od":[1,{"level41":[1,2], "level42":[3,4]}]}]
+{"p1":{"p2":{}}}
 
 # object replace
 
 ## replace deep inner object with number index in path
-{"level1":{"level2":{"level3":[1,{"level41":[1,2], "level42":[3,4]}]}}}
-[{"p":["level1", "level2", "level3", 1, "level41"], "oi":{"5":"6"}, "od":[1, 2]}]
-{"level1":{"level2":{"level3":[1,{"level41":{"5":"6"},"level42":[3,4]}]}}}
+{"p1":{"p2":{"p3":[1,{"level41":[1,2], "level42":[3,4]}]}}}
+[{"p":["p1", "p2", "p3", 1, "level41"], "oi":{"5":"6"}, "od":[1, 2]}]
+{"p1":{"p2":{"p3":[1,{"level41":{"5":"6"},"level42":[3,4]}]}}}
 
 ## replace to inner object
-{"level1":{"level2":{"level3":[1,{"level41":{"5":"6"},"level42":[3,4]}]}}}
-[{"p":["level1", "level2"], "oi":"hello", "od":{"level3":[1,{"level41":[1,2], "level42":[3,4]}]}}]
-{"level1":{"level2":"hello"}}
+{"p1":{"p2":{"p3":[1,{"level41":{"5":"6"},"level42":[3,4]}]}}}
+[{"p":["p1", "p2"], "oi":"hello", "od":{"p3":[1,{"level41":[1,2], "level42":[3,4]}]}}]
+{"p1":{"p2":"hello"}}
 
 # list insert
 
 ## insert to empty array
-{"level1": []}
-[{"p":["level1", 0], "li":{"hello":[1]}}]
-{"level1":[{"hello":[1]}]}
+{"p1": []}
+[{"p":["p1", 0], "li":{"hello":[1]}}]
+{"p1":[{"hello":[1]}]}
 
 ## insert to array
-{"level1":[{"hello":[1]}]}
-[{"p":["level1", 0], "li":1}]
-{"level1":[1,{"hello":[1]}]}
+{"p1":[{"hello":[1]}]}
+[{"p":["p1", 0], "li":1}]
+{"p1":[1,{"hello":[1]}]}
 
 ## insert to inner array
-{"level1":[1,{"hello":[1]}]}
-[{"p":["level1", 1, "hello",1], "li":[7,8]}]
-{"level1":[1,{"hello":[1,[7,8]]}]}
+{"p1":[1,{"hello":[1]}]}
+[{"p":["p1", 1, "hello",1], "li":[7,8]}]
+{"p1":[1,{"hello":[1,[7,8]]}]}
 
 ## append
-{"level1":[1,{"hello":[1,[7,8]]}]}
-[{"p":["level1", 10], "li":[2,3]}]
-{"level1":[1,{"hello":[1,[7,8]]},[2,3]]}
+{"p1":[1,{"hello":[1,[7,8]]}]}
+[{"p":["p1", 10], "li":[2,3]}]
+{"p1":[1,{"hello":[1,[7,8]]},[2,3]]}
 
 # list delete
 
 ## delete from innser array
-{"level1":[1,{"hello":[1,[7,8]]}]}
-[{"p":["level1", 1, "hello", 1], "ld":[7,8]}]
-{"level1":[1,{"hello":[1]}]}
+{"p1":[1,{"hello":[1,[7,8]]}]}
+[{"p":["p1", 1, "hello", 1], "ld":[7,8]}]
+{"p1":[1,{"hello":[1]}]}
 
 ## delete from inner object
-{"level1":[1,{"hello":[1]}]}
-[{"p":["level1", 1], "ld":{"hello":[1,[7,8]]}}]
-{"level1":[1]}
+{"p1":[1,{"hello":[1]}]}
+[{"p":["p1", 1], "ld":{"hello":[1,[7,8]]}}]
+{"p1":[1]}
 
 # list replace
 
 ## replace from innser array
-{"level1":[1,{"hello":[1,[7,8]]}]}
-[{"p":["level1", 1, "hello", 1], "li":{"hello":"world"}, "ld":[7,8]}]
-{"level1":[1,{"hello":[1,{"hello":"world"}]}]}
+{"p1":[1,{"hello":[1,[7,8]]}]}
+[{"p":["p1", 1, "hello", 1], "li":{"hello":"world"}, "ld":[7,8]}]
+{"p1":[1,{"hello":[1,{"hello":"world"}]}]}
 
 ## replace from inner object
-{"level1":[1,{"hello":[1,{"hello":"world"}]}]}
-[{"p":["level1", 1], "li": {"hello":"world"}, "ld":{"hello":[1,[7,8]]}}]
-{"level1":[1,{"hello":"world"}]}
+{"p1":[1,{"hello":[1,{"hello":"world"}]}]}
+[{"p":["p1", 1], "li": {"hello":"world"}, "ld":{"hello":[1,[7,8]]}}]
+{"p1":[1,{"hello":"world"}]}
 
 # list move
 
 ## move left
-{"level1":[1,{"hello":[1,[7,8], 9, 10]}]}
-[{"p":["level1", 1, "hello", 2], "lm":1}]
-{"level1":[1,{"hello":[1,9,[7,8],10]}]}
+{"p1":[1,{"hello":[1,[7,8], 9, 10]}]}
+[{"p":["p1", 1, "hello", 2], "lm":1}]
+{"p1":[1,{"hello":[1,9,[7,8],10]}]}
 
 ## move right
-{"level1":[1,{"hello":[1,[7,8], 9, 10]}]}
-[{"p":["level1", 1, "hello", 1], "lm":2}]
-{"level1":[1,{"hello":[1,9,[7,8],10]}]}
+{"p1":[1,{"hello":[1,[7,8], 9, 10]}]}
+[{"p":["p1", 1, "hello", 1], "lm":2}]
+{"p1":[1,{"hello":[1,9,[7,8],10]}]}
 
 ## stay
-{"level1":[1,{"hello":[1,[7,8], 9, 10]}]}
-[{"p":["level1", 1, "hello", 1], "lm":1}]
-{"level1":[1,{"hello":[1,[7,8],9,10]}]}
+{"p1":[1,{"hello":[1,[7,8], 9, 10]}]}
+[{"p":["p1", 1, "hello", 1], "lm":1}]
+{"p1":[1,{"hello":[1,[7,8],9,10]}]}

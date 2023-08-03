@@ -3,11 +3,6 @@
 [{"p": ["p1"],"oi": "v1"}]
 []
 
-[]
-[{"p": ["p1"],"oi": "v1"}]
-[]
-[{"p": ["p1"],"oi": "v1"}]
-
 # insert/replace/delete op on different path
 
 [{"p": ["p1"],"oi": "v1"}]
@@ -158,8 +153,6 @@
 [{"p": ["p1"],"oi": "v2", "od": "v3"}]
 []
 [{"p": ["p1"],"oi": "v2", "od": "v3"}]
-
-# move
 
 # op on deleted path
 [{"p": ["p1"], "li": "v1"}]
