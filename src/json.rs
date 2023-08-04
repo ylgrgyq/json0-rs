@@ -306,21 +306,21 @@ mod tests {
             .unwrap();
 
         // simple path with only object
-        let paths = Path::from_str(r#"["level1"]"#).unwrap();
+        let paths = Path::try_from(r#"["level1"]"#).unwrap();
         assert_eq!(json.get(&paths).unwrap().unwrap().to_string(), r#""world""#);
-        let paths = Path::from_str(r#"["level12", "level2"]"#).unwrap();
+        let paths = Path::try_from(r#"["level12", "level2"]"#).unwrap();
         assert_eq!(
             json.get(&paths).unwrap().unwrap().to_string(),
             r#""world2""#
         );
-        let paths = Path::from_str(r#"["level3"]"#).unwrap();
+        let paths = Path::try_from(r#"["level3"]"#).unwrap();
         assert!(json.get(&paths).unwrap().is_none());
 
         // complex path with array
         let json: JSON = r#"{"level1":[1,{"hello":[1,[7,8]]}], "level12":"world"}"#
             .try_into()
             .unwrap();
-        let paths = Path::from_str(r#"["level1", 1, "hello"]"#).unwrap();
+        let paths = Path::try_from(r#"["level1", 1, "hello"]"#).unwrap();
 
         assert_eq!(
             json.get(&paths).unwrap().unwrap().to_string(),
@@ -334,13 +334,13 @@ mod tests {
             .try_into()
             .unwrap();
         // simple path
-        let paths = Path::from_str(r#"["level1", 1]"#).unwrap();
+        let paths = Path::try_from(r#"["level1", 1]"#).unwrap();
         assert_eq!(json.get(&paths).unwrap().unwrap().to_string(), r#""b""#);
-        let paths = Path::from_str(r#"["level12", 0]"#).unwrap();
+        let paths = Path::try_from(r#"["level12", 0]"#).unwrap();
 
         // complex path
         assert_eq!(json.get(&paths).unwrap().unwrap().to_string(), r#"123"#);
-        let paths = Path::from_str(r#"["level12", 1, "level2"]"#).unwrap();
+        let paths = Path::try_from(r#"["level12", 1, "level2"]"#).unwrap();
         assert_eq!(
             json.get(&paths).unwrap().unwrap().to_string(),
             r#"["c","d"]"#
@@ -348,7 +348,7 @@ mod tests {
         let json: JSON = r#"{"level1":[1,{"hello":[1,[7,8]]}], "level12":"world"}"#
             .try_into()
             .unwrap();
-        let paths = Path::from_str(r#"["level1", 1, "hello", 1]"#).unwrap();
+        let paths = Path::try_from(r#"["level1", 1, "hello", 1]"#).unwrap();
 
         assert_eq!(json.get(&paths).unwrap().unwrap().to_string(), r#"[7,8]"#);
     }

@@ -308,12 +308,7 @@ impl OperationComponent {
     }
 
     pub fn increase_last_index_path(&mut self) {
-        let path_elems = self.path.get_mut_elements();
-        if let Some(last_p) = path_elems.pop() {
-            if let PathElement::Index(i) = last_p {
-                path_elems.push(PathElement::Index(i + 1))
-            }
-        }
+        self.path.increase_index(self.path.len() - 1);
     }
 
     pub fn decrease_last_index_path(&mut self) {
@@ -369,7 +364,7 @@ impl TryFrom<Value> for OperationComponent {
             return Err(JsonError::InvalidOperation("Missing path".into()));
         }
 
-        let paths = Path::from_json_value(path_value.unwrap())?;
+        let paths = Path::try_from(path_value.unwrap())?;
         let operator = input.try_into()?;
 
         Ok(OperationComponent {

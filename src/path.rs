@@ -50,62 +50,12 @@ pub struct Path {
 }
 
 impl Path {
-    pub fn from_str(input: &str) -> Result<Path> {
-        if let Ok(value) = serde_json::from_str(input) {
-            return Path::from_json_value(&value);
-        }
-        Err(JsonError::InvalidPathFormat)
-    }
-
-    pub fn from_json_value(value: &Value) -> Result<Path> {
-        match value {
-            Value::Array(arr) => {
-                if arr.is_empty() {
-                    Err(JsonError::InvalidPathFormat)
-                } else {
-                    let paths = arr
-                        .iter()
-                        .map(|pe| match pe {
-                            Value::Number(n) => {
-                                if let Some(i) = n.as_u64() {
-                                    Ok(PathElement::Index(i as usize))
-                                } else {
-                                    Err(JsonError::InvalidPathElement(pe.to_string()))
-                                }
-                            }
-                            Value::String(k) => Ok(PathElement::Key(k.to_string())),
-                            _ => Err(JsonError::InvalidPathElement(pe.to_string())),
-                        })
-                        .collect::<Result<Vec<PathElement>>>()?;
-                    Ok(Path { paths })
-                }
-            }
-            _ => Err(JsonError::InvalidPathFormat),
-        }
-    }
-
     pub fn first_key_path(&self) -> Option<&String> {
-        let first_path = self.paths.first();
-        if first_path.is_none() {
-            return None;
-        }
-
-        match first_path.unwrap() {
-            PathElement::Index(_) => None,
-            PathElement::Key(k) => Some(k),
-        }
+        self.get_key_at(0)
     }
 
     pub fn first_index_path(&self) -> Option<&usize> {
-        let first_path = self.paths.first();
-        if first_path.is_none() {
-            return None;
-        }
-
-        match first_path.unwrap() {
-            PathElement::Index(i) => Some(i),
-            PathElement::Key(_) => None,
-        }
+        self.get_index_at(0)
     }
 
     pub fn get(&self, index: usize) -> Option<&PathElement> {
@@ -120,6 +70,30 @@ impl Path {
         &mut self.paths
     }
 
+    pub fn get_key_at(&self, index: usize) -> Option<&String> {
+        let first_path = self.paths.get(index);
+        if first_path.is_none() {
+            return None;
+        }
+
+        match first_path.unwrap() {
+            PathElement::Index(_) => None,
+            PathElement::Key(k) => Some(k),
+        }
+    }
+
+    pub fn get_index_at(&self, index: usize) -> Option<&usize> {
+        let first_path = self.paths.get(index);
+        if first_path.is_none() {
+            return None;
+        }
+
+        match first_path.unwrap() {
+            PathElement::Index(i) => Some(i),
+            PathElement::Key(_) => None,
+        }
+    }
+
     pub fn last(&self) -> Option<&PathElement> {
         self.get(self.len() - 1)
     }
@@ -130,6 +104,26 @@ impl Path {
             return Some(o);
         }
         return None;
+    }
+
+    pub fn increase_index(&mut self, index: usize) -> bool {
+        if let Some(p) = self.paths.get(index) {
+            if let PathElement::Index(i) = p {
+                self.replace(index, PathElement::Index(i + 1));
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn decrease_index(&mut self, index: usize) -> bool {
+        if let Some(p) = self.paths.get(index) {
+            if let PathElement::Index(i) = p {
+                self.replace(index, PathElement::Index(i - 1));
+                return true;
+            }
+        }
+        false
     }
 
     pub fn split_at(&self, mid: usize) -> (Path, Path) {
@@ -147,7 +141,7 @@ impl Path {
     pub fn max_common_path(&self, path: &Path) -> Path {
         let mut common_p = vec![];
         for (i, pa) in path.get_elements().iter().enumerate() {
-            if let Some(pb) = path.get(i) {
+            if let Some(pb) = self.get(i) {
                 if pa.eq(pb) {
                     common_p.push(pb.clone());
                     continue;
@@ -214,6 +208,48 @@ impl Display for Path {
     }
 }
 
+impl TryFrom<&str> for Path {
+    type Error = JsonError;
+
+    fn try_from(input: &str) -> std::result::Result<Self, Self::Error> {
+        if let Ok(value) = serde_json::from_str::<Value>(input) {
+            return Path::try_from(&value);
+        }
+        Err(JsonError::InvalidPathFormat)
+    }
+}
+
+impl TryFrom<&Value> for Path {
+    type Error = JsonError;
+
+    fn try_from(value: &Value) -> std::result::Result<Self, Self::Error> {
+        match value {
+            Value::Array(arr) => {
+                if arr.is_empty() {
+                    Err(JsonError::InvalidPathFormat)
+                } else {
+                    let paths = arr
+                        .iter()
+                        .map(|pe| match pe {
+                            Value::Number(n) => {
+                                if let Some(i) = n.as_u64() {
+                                    Ok(PathElement::Index(i as usize))
+                                } else {
+                                    Err(JsonError::InvalidPathElement(pe.to_string()))
+                                }
+                            }
+                            Value::String(k) => Ok(PathElement::Key(k.to_string())),
+                            _ => Err(JsonError::InvalidPathElement(pe.to_string())),
+                        })
+                        .collect::<Result<Vec<PathElement>>>()?;
+                    Ok(Path { paths })
+                }
+            }
+            _ => Err(JsonError::InvalidPathFormat),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,37 +258,37 @@ mod tests {
     #[test]
     fn test_parse_invalid_path() {
         assert_matches!(
-            Path::from_str("]").unwrap_err(),
+            Path::try_from("]").unwrap_err(),
             JsonError::InvalidPathFormat
         );
         assert_matches!(
-            Path::from_str("[").unwrap_err(),
+            Path::try_from("[").unwrap_err(),
             JsonError::InvalidPathFormat
         );
         assert_matches!(
-            Path::from_str("").unwrap_err(),
+            Path::try_from("").unwrap_err(),
             JsonError::InvalidPathFormat
         );
         assert_matches!(
-            Path::from_str("[]").unwrap_err(),
+            Path::try_from("[]").unwrap_err(),
             JsonError::InvalidPathFormat
         );
         assert_matches!(
-            Path::from_str("hello").unwrap_err(),
+            Path::try_from("hello").unwrap_err(),
             JsonError::InvalidPathFormat
         );
         assert_matches!(
-            Path::from_str("[hello]").unwrap_err(),
+            Path::try_from("[hello]").unwrap_err(),
             JsonError::InvalidPathFormat
         );
     }
 
     #[test]
     fn test_parse_index_path() {
-        let paths = Path::from_str("[1]").unwrap();
+        let paths = Path::try_from("[1]").unwrap();
         assert_eq!(1, paths.len());
         assert_eq!(1, *paths.first_index_path().unwrap());
-        let paths = Path::from_str("[2, 3, 4]").unwrap();
+        let paths = Path::try_from("[2, 3, 4]").unwrap();
         assert_eq!(3, paths.len());
         assert_eq!(2, *paths.first_index_path().unwrap());
         let paths = paths.next_level();
@@ -267,10 +303,10 @@ mod tests {
 
     #[test]
     fn test_parse_key_path() {
-        let paths = Path::from_str("[\"hello\"]").unwrap();
+        let paths = Path::try_from("[\"hello\"]").unwrap();
         assert_eq!(1, paths.len());
         assert_eq!("hello", paths.first_key_path().unwrap());
-        let paths = Path::from_str("[\"hello\", \"word\", \"hello\"]").unwrap();
+        let paths = Path::try_from("[\"hello\", \"word\", \"hello\"]").unwrap();
         assert_eq!(3, paths.len());
         assert_eq!("hello", paths.first_key_path().unwrap());
         let paths = paths.next_level();
@@ -285,7 +321,7 @@ mod tests {
 
     #[test]
     fn test_parse_path_with_blanks() {
-        let paths = Path::from_str("[ \"hello \"  ,  1,  \"  world \",  4  ]").unwrap();
+        let paths = Path::try_from("[ \"hello \"  ,  1,  \"  world \",  4  ]").unwrap();
         assert_eq!(4, paths.len());
         assert_eq!("hello ", paths.first_key_path().unwrap());
         let paths = paths.next_level();
@@ -298,5 +334,21 @@ mod tests {
         assert_eq!(4, *paths.first_index_path().unwrap());
         let paths = paths.next_level();
         assert!(paths.is_empty());
+    }
+
+    #[test]
+    fn test_increase_decrease_path() {
+        let mut paths = Path::try_from("[ \"hello \"  ,  1,  \"  world \",  4  ]").unwrap();
+        assert!(paths.increase_index(1));
+        assert_eq!(2, *paths.get_index_at(1).unwrap());
+        assert!(paths.increase_index(3));
+        assert_eq!(5, *paths.get_index_at(3).unwrap());
+        assert!(paths.decrease_index(1));
+        assert_eq!(1, *paths.get_index_at(1).unwrap());
+        assert!(paths.decrease_index(3));
+        assert_eq!(4, *paths.get_index_at(3).unwrap());
+
+        assert!(!paths.decrease_index(0));
+        assert!(!paths.increase_index(0));
     }
 }

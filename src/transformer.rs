@@ -267,7 +267,7 @@ impl Transformer {
                 }
 
                 if base_op.path.last().unwrap() <= new_op.path.last().unwrap() {
-                    new_op.increase_last_index_path();
+                    new_op.path.increase_index(max_common_path.len() - 1);
                 }
 
                 if let Operator::ListMove(i) = &mut new_op.operator {
@@ -277,8 +277,8 @@ impl Transformer {
                 }
             }
             Operator::ListDelete(_) => {
-                let base_op_operate_path = base_op.path.get(new_operate_path.len()).unwrap();
-                let new_op_operate_path = new_op.path.get(new_operate_path.len()).unwrap();
+                let base_op_operate_path = base_op.path.get(max_common_path.len() - 1).unwrap();
+                let new_op_operate_path = new_op.path.get(max_common_path.len() - 1).unwrap();
                 if let Operator::ListMove(lm) = new_op.operator {
                     if same_operand {
                         if base_op_is_prefix {
@@ -295,7 +295,7 @@ impl Transformer {
                 }
 
                 if base_op_operate_path < new_op_operate_path {
-                    new_op.decrease_last_index_path();
+                    new_op.path.decrease_index(max_common_path.len() - 1);
                 } else if base_op_is_prefix {
                     if !same_operand {
                         // we're below the deleted element, so -> noop
