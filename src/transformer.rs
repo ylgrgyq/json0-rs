@@ -1,3 +1,5 @@
+use std::cmp;
+
 use log::info;
 
 use crate::common::Validation;
@@ -266,19 +268,35 @@ impl Transformer {
                     }
                 }
 
-                if base_op.path.last().unwrap() <= new_op.path.last().unwrap() {
-                    new_op.path.increase_index(max_common_path.len() - 1);
+                if base_op
+                    .path
+                    .get(base_operate_path.len())
+                    .and_then(|p1| {
+                        new_op
+                            .path
+                            .get(base_operate_path.len())
+                            .and_then(|p2| Some(p1 <= p2))
+                    })
+                    .unwrap_or(false)
+                {
+                    new_op.path.increase_index(base_operate_path.len());
                 }
 
-                if let Operator::ListMove(i) = &mut new_op.operator {
-                    if same_operand && base_op.path.last().unwrap() <= &PathElement::Index(*i) {
-                        new_op.operator = Operator::ListMove(*i + 1);
+                if let Operator::ListMove(lm) = &mut new_op.operator {
+                    if same_operand
+                        && base_op
+                            .path
+                            .get(base_operate_path.len())
+                            .and_then(|p| Some(p <= &PathElement::Index(*lm)))
+                            .unwrap_or(false)
+                    {
+                        new_op.operator = Operator::ListMove(*lm + 1);
                     }
                 }
             }
             Operator::ListDelete(_) => {
-                let base_op_operate_path = base_op.path.get(max_common_path.len() - 1).unwrap();
-                let new_op_operate_path = new_op.path.get(max_common_path.len() - 1).unwrap();
+                let base_op_operate_path = base_op.path.get(base_operate_path.len()).unwrap();
+                let new_op_operate_path = new_op.path.get(base_operate_path.len()).unwrap();
                 if let Operator::ListMove(lm) = new_op.operator {
                     if same_operand {
                         if base_op_is_prefix {
@@ -295,7 +313,7 @@ impl Transformer {
                 }
 
                 if base_op_operate_path < new_op_operate_path {
-                    new_op.path.decrease_index(max_common_path.len() - 1);
+                    new_op.path.decrease_index(base_operate_path.len());
                 } else if base_op_is_prefix {
                     if !same_operand {
                         // we're below the deleted element, so -> noop
@@ -456,33 +474,34 @@ impl Transformer {
                             return Ok(vec![new_op]);
                         }
                         Operator::ListInsert(_) => {
-                            let from = base_op.path.get(new_operate_path.len()).unwrap();
-                            let to = base_op.path.get(*lm).unwrap();
-                            let p = new_op.path.get(new_operate_path.len()).unwrap().clone();
+                            let operate_index = base_operate_path.len();
+                            let from = base_op.path.get(operate_index).unwrap();
+                            let to = *lm;
+                            let p = new_op.path.get(operate_index).unwrap().clone();
                             if &p > from {
-                                new_op.decrease_last_index_path();
+                                new_op.path.decrease_index(operate_index);
                             }
-                            if &p > to {
-                                new_op.increase_last_index_path();
+                            if &p > &PathElement::Index(to) {
+                                new_op.path.increase_index(operate_index);
                             }
                             return Ok(vec![new_op]);
                         }
                         _ => {}
                     }
                 }
-                let from = base_op.path.get(new_operate_path.len()).unwrap();
-                let to = base_op.path.get(*lm).unwrap();
-                let p = new_op.path.get(new_operate_path.len()).unwrap().clone();
+                let from = base_op.path.get(base_operate_path.len()).unwrap();
+                let to = PathElement::Index(*lm);
+                let p = new_op.path.get(base_operate_path.len()).unwrap().clone();
                 if &p == from {
-                    new_op.path.replace(new_operate_path.len(), to.clone());
+                    new_op.path.replace(base_operate_path.len(), to.clone());
                 } else {
                     if &p > from {
-                        new_op.decrease_last_index_path();
+                        new_op.path.decrease_index(base_operate_path.len());
                     }
-                    if &p > to {
-                        new_op.increase_last_index_path();
-                    } else if &p == to && from > to {
-                        new_op.increase_last_index_path();
+                    if &p > &to {
+                        new_op.path.increase_index(base_operate_path.len());
+                    } else if &p == &to && from > &to {
+                        new_op.path.increase_index(base_operate_path.len());
                     }
                 }
             }
