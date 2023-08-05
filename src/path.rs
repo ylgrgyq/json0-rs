@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{cmp::Ordering, fmt::Display};
 
 use serde_json::Value;
 
@@ -18,7 +18,16 @@ impl PartialOrd for PathElement {
                 PathElement::Index(b) => a.partial_cmp(b),
                 PathElement::Key(_) => None,
             },
-            PathElement::Key(_) => None,
+            PathElement::Key(a) => match other {
+                PathElement::Index(_) => None,
+                PathElement::Key(b) => {
+                    if a == b {
+                        Some(Ordering::Equal)
+                    } else {
+                        None
+                    }
+                }
+            },
         }
     }
 }

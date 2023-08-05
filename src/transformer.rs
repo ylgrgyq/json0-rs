@@ -18,7 +18,11 @@ fn is_equivalent_to_noop(op: &OperationComponent) -> bool {
         Operator::ListReplace(new_v, old_v) | Operator::ObjectReplace(new_v, old_v) => {
             new_v.eq(old_v)
         }
-        Operator::ListMove(_) => false,
+        Operator::ListMove(lm) => op
+            .path
+            .last()
+            .and_then(|p| Some(p == &PathElement::Index(*lm)))
+            .unwrap_or(false),
     }
 }
 
@@ -417,59 +421,71 @@ impl Transformer {
                 if same_operand {
                     match &mut new_op.operator {
                         Operator::ListMove(new_op_lm) => {
-                            let from = new_op.path.get(new_operate_path.len()).unwrap().clone();
-                            let to = new_op.path.get(*lm).unwrap().clone();
                             let other_from = base_op.path.get(new_operate_path.len()).unwrap();
-                            let other_to = base_op.path.get(*lm).unwrap();
-                            if other_from != other_to {
-                                if &from == other_from {
-                                    if side == TransformSide::LEFT {
-                                        new_op
-                                            .path
-                                            .replace(new_operate_path.len(), other_to.clone());
-                                    } else {
-                                        return Ok(vec![]);
+                            let other_to = PathElement::Index(*lm);
+
+                            if other_from == &other_to {
+                                return Ok(vec![new_op]);
+                            }
+
+                            let from = new_op.path.get(new_operate_path.len()).unwrap().clone();
+                            let to: PathElement = PathElement::Index(*new_op_lm);
+
+                            if &from == other_from {
+                                if to == other_to {
+                                    // already moved to where we want
+                                    return Ok(vec![]);
+                                }
+                                if side == TransformSide::LEFT {
+                                    new_op
+                                        .path
+                                        .replace(base_operate_path.len(), other_to.clone());
+                                    if from == to {
+                                        new_op.operator = base_op.operator.clone();
                                     }
                                 } else {
-                                    let n_lm = *new_op_lm;
-                                    if &from > other_from {
-                                        new_op.path.decrease_index(base_operate_path.len());
-                                    }
-                                    if &from > other_to {
+                                    return Ok(vec![]);
+                                }
+                            } else {
+                                let mut n_lm = *new_op_lm;
+                                if &from > other_from {
+                                    new_op.path.decrease_index(base_operate_path.len());
+                                }
+                                if &from > &other_to {
+                                    new_op.path.increase_index(base_operate_path.len());
+                                } else if &from == &other_to {
+                                    if other_from > &other_to {
                                         new_op.path.increase_index(base_operate_path.len());
-                                    } else if &from == other_to {
-                                        if other_from > other_to {
-                                            new_op.path.increase_index(base_operate_path.len());
-                                        }
                                         if from == to {
-                                            new_op.operator = Operator::ListMove(n_lm + 1);
-                                        }
-                                    }
-                                    if &to > other_from {
-                                        new_op.operator = Operator::ListMove(n_lm - 1);
-                                    } else if &to == other_from {
-                                        if to > from {
-                                            new_op.operator = Operator::ListMove(n_lm - 1);
-                                        }
-                                    }
-                                    if &to > other_to {
-                                        new_op.operator = Operator::ListMove(n_lm + 1);
-                                    } else if &to == other_to {
-                                        if (other_to > other_from && to > from)
-                                            || (other_to < other_from && to < from)
-                                        {
-                                            if side == TransformSide::RIGHT {
-                                                new_op.operator = Operator::ListMove(n_lm + 1);
-                                            }
-                                        } else {
-                                            if to > from {
-                                                new_op.operator = Operator::ListMove(n_lm + 1);
-                                            } else if &to == other_from {
-                                                new_op.operator = Operator::ListMove(n_lm - 1);
-                                            }
+                                            n_lm += 1;
                                         }
                                     }
                                 }
+                                if &to > other_from {
+                                    n_lm -= 1;
+                                } else if &to == other_from {
+                                    if to > from {
+                                        n_lm -= 1;
+                                    }
+                                }
+                                if &to > &other_to {
+                                    n_lm += 1;
+                                } else if &to == &other_to {
+                                    if (&other_to > other_from && to > from)
+                                        || (&other_to < other_from && to < from)
+                                    {
+                                        if side == TransformSide::RIGHT {
+                                            n_lm += 1;
+                                        }
+                                    } else {
+                                        if to > from {
+                                            n_lm += 1;
+                                        } else if &to == other_from {
+                                            n_lm -= 1;
+                                        }
+                                    }
+                                }
+                                new_op.operator = Operator::ListMove(n_lm);
                             }
                             return Ok(vec![new_op]);
                         }
