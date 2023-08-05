@@ -5,14 +5,13 @@ use std::{
     vec,
 };
 
-use log::info;
 use serde_json::{Map, Value};
 
 use crate::{
     common::Validation,
     error::JsonError,
     error::{self, Result},
-    path::{Path, PathElement},
+    path::Path,
 };
 
 pub trait Appliable {
@@ -304,19 +303,6 @@ impl OperationComponent {
             let mut p = self.path.clone();
             p.get_mut_elements().pop();
             p
-        }
-    }
-
-    pub fn increase_last_index_path(&mut self) {
-        self.path.increase_index(self.path.len() - 1);
-    }
-
-    pub fn decrease_last_index_path(&mut self) {
-        let path_elems = self.path.get_mut_elements();
-        if let Some(last_p) = path_elems.pop() {
-            if let PathElement::Index(i) = last_p {
-                path_elems.push(PathElement::Index(i - 1))
-            }
         }
     }
 

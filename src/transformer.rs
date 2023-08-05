@@ -262,7 +262,7 @@ impl Transformer {
                 if let Operator::ListInsert(_) = &new_op.operator {
                     if same_operand && base_op_is_prefix {
                         if side == TransformSide::RIGHT {
-                            new_op.increase_last_index_path();
+                            new_op.path.increase_index(base_operate_path.len());
                         }
                         return Ok(vec![new_op]);
                     }
@@ -433,13 +433,13 @@ impl Transformer {
                                 } else {
                                     let n_lm = *new_op_lm;
                                     if &from > other_from {
-                                        new_op.decrease_last_index_path();
+                                        new_op.path.decrease_index(base_operate_path.len());
                                     }
                                     if &from > other_to {
-                                        new_op.increase_last_index_path();
+                                        new_op.path.increase_index(base_operate_path.len());
                                     } else if &from == other_to {
                                         if other_from > other_to {
-                                            new_op.increase_last_index_path();
+                                            new_op.path.increase_index(base_operate_path.len());
                                         }
                                         if from == to {
                                             new_op.operator = Operator::ListMove(n_lm + 1);
