@@ -12,7 +12,7 @@ use crate::{
     error::JsonError,
     error::{self, Result},
     json::Appliable,
-    path::Path,
+    path::{Path, PathElement},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -422,6 +422,38 @@ impl Display for OperationComponent {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Operation {
     operations: Vec<OperationComponent>,
+}
+
+impl Operation {
+    pub fn append(&mut self, op: &OperationComponent) -> Result<()> {
+        op.validates()?;
+
+        if let Operator::ListMove(m) = op.operator {
+            if op
+                .path
+                .get(op.path.len() - 1)
+                .unwrap()
+                .eq(&PathElement::Index(m))
+            {
+                return Ok(());
+            }
+        }
+
+        if self.is_empty() {
+            self.push(op.clone());
+            return Ok(());
+        }
+
+        let last = self.last_mut().unwrap();
+        if last.path.eq(&op.path) && last.merge(op) {
+            if last.operator.eq(&Operator::Noop()) {
+                self.pop();
+            }
+            return Ok(());
+        }
+        self.push(op.clone());
+        Ok(())
+    }
 }
 
 impl Deref for Operation {

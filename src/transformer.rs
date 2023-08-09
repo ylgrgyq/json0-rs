@@ -65,36 +65,6 @@ impl Transformer {
         self.transform_matrix(operation.clone(), base_operation.clone())
     }
 
-    pub fn append(&self, operation: &mut Operation, op: &OperationComponent) -> Result<()> {
-        op.validates()?;
-
-        if let Operator::ListMove(m) = op.operator {
-            if op
-                .path
-                .get(op.path.len() - 1)
-                .unwrap()
-                .eq(&PathElement::Index(m))
-            {
-                return Ok(());
-            }
-        }
-
-        if operation.is_empty() {
-            operation.push(op.clone());
-            return Ok(());
-        }
-
-        let last = operation.last_mut().unwrap();
-        if last.path.eq(&op.path) && last.merge(op) {
-            if last.operator.eq(&Operator::Noop()) {
-                operation.pop();
-            }
-            return Ok(());
-        }
-        operation.push(op.clone());
-        Ok(())
-    }
-
     pub fn invert(&self, operation: &OperationComponent) -> Result<OperationComponent> {
         operation.validates()?;
 
@@ -132,7 +102,7 @@ impl Transformer {
 
         let mut ret: Operation = a.clone();
         for op in b.iter() {
-            self.append(&mut ret, &op)?;
+            ret.append(op)?;
         }
 
         Ok(ret)
