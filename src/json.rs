@@ -2,7 +2,7 @@ use std::{fmt::Display, mem};
 
 use crate::{
     error::{JsonError, Result},
-    operation::{Appliable, Operation, Operator},
+    operation::{Appliable, Operation, OperationComponent, Operator},
     path::Path,
 };
 
@@ -106,18 +106,18 @@ impl Routable for Vec<serde_json::Value> {
 }
 
 impl Appliable for Value {
-    fn apply(&mut self, paths: Path, operator: Operator) -> Result<()> {
+    fn apply(&mut self, paths: Path, op: OperationComponent) -> Result<()> {
         if paths.len() > 1 {
             let (left, right) = paths.split_at(paths.len() - 1);
             return self
                 .route_get_mut(&left)?
                 .ok_or(JsonError::BadPath)?
-                .apply(right, operator);
+                .apply(right, op);
         }
         match self {
-            Value::Array(array) => array.apply(paths, operator),
-            Value::Object(obj) => obj.apply(paths, operator),
-            Value::Number(n) => match operator {
+            Value::Array(array) => array.apply(paths, op),
+            Value::Object(obj) => obj.apply(paths, op),
+            Value::Number(n) => match op.operator {
                 Operator::AddNumber(v) => {
                     let new_v = n.as_u64().unwrap() + v.as_u64().unwrap();
                     let serde_v = serde_json::to_value(new_v)?;
@@ -140,15 +140,15 @@ impl Appliable for Value {
 }
 
 impl Appliable for serde_json::Map<String, serde_json::Value> {
-    fn apply(&mut self, paths: Path, operator: Operator) -> Result<()> {
+    fn apply(&mut self, paths: Path, op: OperationComponent) -> Result<()> {
         assert!(paths.len() == 1);
 
         let k = paths.first_key_path().ok_or(JsonError::BadPath)?;
         let target_value = self.get_mut(k);
-        match &operator {
+        match &op.operator {
             Operator::AddNumber(v) => {
                 if let Some(old_v) = target_value {
-                    old_v.apply(paths, operator)
+                    old_v.apply(paths, op)
                 } else {
                     self.insert(k.clone(), v.clone());
                     Ok(())
@@ -184,12 +184,12 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
 }
 
 impl Appliable for Vec<serde_json::Value> {
-    fn apply(&mut self, paths: Path, operator: Operator) -> Result<()> {
+    fn apply(&mut self, paths: Path, op: OperationComponent) -> Result<()> {
         assert!(paths.len() == 1);
 
         let index = paths.first_index_path().ok_or(JsonError::BadPath)?;
         let target_value = self.get_mut(*index);
-        match &operator {
+        match &op.operator {
             Operator::AddNumber(v) => {
                 if let Some(old_v) = target_value {
                     match old_v {
@@ -263,9 +263,8 @@ impl Display for JSON {
 impl JSON {
     pub fn apply(&mut self, operations: Vec<Operation>) -> Result<()> {
         for operation in operations {
-            for op_comp in operation.iter() {
-                self.value
-                    .apply(op_comp.path.clone(), op_comp.operator.clone())?;
+            for op_comp in operation.into_iter() {
+                self.value.apply(op_comp.path.clone(), op_comp)?;
             }
         }
         Ok(())

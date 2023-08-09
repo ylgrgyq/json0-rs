@@ -226,7 +226,7 @@ impl Transformer {
         if base_operate_path.len() > new_operate_path.len() {
             // if base_op's path is longger and contains new_op's path, new_op should include base_op's effect
             if new_op.path.is_prefix_of(&base_op.path) {
-                new_op.consume(&max_common_path, &base_op)?;
+                new_op.consume(&max_common_path, base_op)?;
             }
             return Ok(vec![new_op]);
         }
