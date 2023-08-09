@@ -19,8 +19,52 @@ pub trait Appliable {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum SubType {
+    NumberAdd,
+    Text,
+    Custome(String),
+}
+
+impl TryFrom<&Value> for SubType {
+    type Error = JsonError;
+
+    fn try_from(value: &Value) -> std::result::Result<Self, Self::Error> {
+        match value {
+            Value::String(sub) => {
+                if sub.eq("na") {
+                    return Ok(SubType::NumberAdd);
+                }
+                if sub.eq("text") {
+                    return Ok(SubType::Text);
+                }
+                return Ok(SubType::Custome(sub.to_string()));
+            }
+            _ => {
+                return Err(JsonError::InvalidOperation(format!(
+                    "invalid sub type: {}",
+                    value
+                )))
+            }
+        }
+    }
+}
+
+impl Display for SubType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s: String = match self {
+            SubType::NumberAdd => "na".into(),
+            SubType::Text => "text".into(),
+            SubType::Custome(t) => t.to_string(),
+        };
+        f.write_str(&s)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Operator {
     Noop(),
+    SubType(SubType, Value),
     AddNumber(Value),
     ListInsert(Value),
     ListDelete(Value),
@@ -39,6 +83,15 @@ pub enum Operator {
 
 impl Operator {
     fn map_to_operator(obj: &Map<String, Value>) -> Result<Operator> {
+        if let Some(t) = obj.get("t") {
+            let sub_type = t.try_into()?;
+            let op = obj
+                .get("o")
+                .and_then(|o| Some(o.clone()))
+                .unwrap_or(Value::Null);
+            return Ok(Operator::SubType(sub_type, op));
+        }
+
         if let Some(na) = obj.get("na") {
             return Ok(Operator::AddNumber(na.clone()));
         }
@@ -76,6 +129,7 @@ impl Operator {
     fn validate_json_object_size(&self, obj: &Map<String, Value>) -> Result<()> {
         let size = match self {
             Operator::Noop() => 1,
+            Operator::SubType(_, _) => 3,
             Operator::AddNumber(_) => 2,
             Operator::ListInsert(_) => 2,
             Operator::ListDelete(_) => 2,
@@ -139,6 +193,7 @@ impl Display for Operator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s: String = match self {
             Operator::Noop() => "".into(),
+            Operator::SubType(t, o) => format!("t: {}, o: {}", t, o),
             Operator::AddNumber(n) => format!("na: {}", n.to_string()),
             Operator::ListInsert(i) => format!("li: {}", i.to_string()),
             Operator::ListDelete(d) => format!("ld: {}", d.to_string()),
@@ -446,5 +501,37 @@ impl Display for Operation {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_log::test;
+
+    #[test]
+    fn test_number_add_operator() {
+        let op: OperationComponent = r#"{"p":["p1","p2"], "t":"na", "o":100}"#.try_into().unwrap();
+
+        assert_eq!(
+            Operator::SubType(SubType::NumberAdd, serde_json::to_value(100).unwrap()),
+            op.operator
+        );
+    }
+
+    #[test]
+    fn test_text_operator() {
+        let op: OperationComponent =
+            r#"{"p":["p1","p2"], "t":"text", "o":{"p":["p3"],"si":"hello"}}"#
+                .try_into()
+                .unwrap();
+
+        assert_eq!(
+            Operator::SubType(
+                SubType::Text,
+                serde_json::from_str(r#"{"p":["p3"],"si":"hello"}"#).unwrap()
+            ),
+            op.operator
+        );
     }
 }

@@ -1,7 +1,3 @@
-use std::cmp;
-
-use log::info;
-
 use crate::common::Validation;
 use crate::error::{JsonError, Result};
 use crate::operation::{Operation, OperationComponent, Operator};
@@ -10,6 +6,7 @@ use crate::path::PathElement;
 fn is_equivalent_to_noop(op: &OperationComponent) -> bool {
     match &op.operator {
         Operator::Noop() => true,
+        Operator::SubType(_, _) => false,
         Operator::AddNumber(_)
         | Operator::ListInsert(_)
         | Operator::ListDelete(_)
@@ -104,6 +101,7 @@ impl Transformer {
         let mut path = operation.path.clone();
         let operator = match &operation.operator {
             Operator::Noop() => Operator::Noop(),
+            Operator::SubType(_, _) => todo!(),
             Operator::AddNumber(n) => {
                 Operator::AddNumber(serde_json::to_value(-n.as_i64().unwrap()).unwrap())
             }
