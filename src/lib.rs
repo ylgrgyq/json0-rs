@@ -3,6 +3,7 @@ pub mod error;
 pub mod json;
 pub mod operation;
 pub mod path;
+mod sub_type;
 pub mod transformer;
 
 #[cfg(test)]

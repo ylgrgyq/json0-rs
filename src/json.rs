@@ -6,7 +6,6 @@ use crate::{
     path::Path,
 };
 
-use log::info;
 use serde_json::Value;
 
 trait Routable {
