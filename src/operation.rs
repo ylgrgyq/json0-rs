@@ -11,12 +11,9 @@ use crate::{
     common::Validation,
     error::JsonError,
     error::{self, Result},
+    json::Appliable,
     path::Path,
 };
-
-pub trait Appliable {
-    fn apply(&mut self, paths: Path, operator: OperationComponent) -> Result<()>;
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SubType {

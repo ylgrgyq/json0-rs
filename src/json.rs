@@ -2,7 +2,7 @@ use std::{fmt::Display, mem};
 
 use crate::{
     error::{JsonError, Result},
-    operation::{Appliable, Operation, OperationComponent, Operator},
+    operation::{Operation, OperationComponent, Operator},
     path::Path,
 };
 
@@ -12,6 +12,10 @@ trait Routable {
     fn route_get(&self, paths: &Path) -> Result<Option<&Value>>;
 
     fn route_get_mut(&mut self, paths: &Path) -> Result<Option<&mut Value>>;
+}
+
+pub trait Appliable {
+    fn apply(&mut self, paths: Path, operator: OperationComponent) -> Result<()>;
 }
 
 impl Routable for Value {
