@@ -214,8 +214,10 @@ pub struct OperationComponent {
 }
 
 impl OperationComponent {
-    pub fn new(path: Path, operator: Operator) -> OperationComponent {
-        OperationComponent { path, operator }
+    pub fn new(path: Path, operator: Operator) -> Result<OperationComponent> {
+        let op = OperationComponent { path, operator };
+        op.validates()?;
+        return Ok(op);
     }
 
     pub fn noop(&self) -> OperationComponent {
@@ -239,6 +241,38 @@ impl OperationComponent {
         } else {
             Some(self)
         }
+    }
+
+    pub fn invert(&self) -> Result<OperationComponent> {
+        self.validates()?;
+
+        let mut path = self.path.clone();
+        let operator = match &self.operator {
+            Operator::Noop() => Operator::Noop(),
+            Operator::SubType(_, _) => todo!(),
+            Operator::AddNumber(n) => {
+                Operator::AddNumber(serde_json::to_value(-n.as_i64().unwrap()).unwrap())
+            }
+            Operator::ListInsert(v) => Operator::ListDelete(v.clone()),
+            Operator::ListDelete(v) => Operator::ListInsert(v.clone()),
+            Operator::ListReplace(new_v, old_v) => {
+                Operator::ListReplace(old_v.clone(), new_v.clone())
+            }
+            Operator::ListMove(new) => {
+                let old_p = path.replace(path.len() - 1, PathElement::Index(new.clone()));
+                if let Some(PathElement::Index(i)) = old_p {
+                    Operator::ListMove(i)
+                } else {
+                    return Err(JsonError::BadPath);
+                }
+            }
+            Operator::ObjectInsert(v) => Operator::ObjectDelete(v.clone()),
+            Operator::ObjectDelete(v) => Operator::ObjectInsert(v.clone()),
+            Operator::ObjectReplace(new_v, old_v) => {
+                Operator::ObjectReplace(old_v.clone(), new_v.clone())
+            }
+        };
+        OperationComponent::new(path, operator)
     }
 
     pub fn merge(&mut self, op: &OperationComponent) -> bool {

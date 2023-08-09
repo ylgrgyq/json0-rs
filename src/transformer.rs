@@ -1,5 +1,5 @@
 use crate::common::Validation;
-use crate::error::{JsonError, Result};
+use crate::error::Result;
 use crate::operation::{Operation, OperationComponent, Operator};
 use crate::path::PathElement;
 
@@ -63,38 +63,6 @@ impl Transformer {
         }
 
         self.transform_matrix(operation.clone(), base_operation.clone())
-    }
-
-    pub fn invert(&self, operation: &OperationComponent) -> Result<OperationComponent> {
-        operation.validates()?;
-
-        let mut path = operation.path.clone();
-        let operator = match &operation.operator {
-            Operator::Noop() => Operator::Noop(),
-            Operator::SubType(_, _) => todo!(),
-            Operator::AddNumber(n) => {
-                Operator::AddNumber(serde_json::to_value(-n.as_i64().unwrap()).unwrap())
-            }
-            Operator::ListInsert(v) => Operator::ListDelete(v.clone()),
-            Operator::ListDelete(v) => Operator::ListInsert(v.clone()),
-            Operator::ListReplace(new_v, old_v) => {
-                Operator::ListReplace(old_v.clone(), new_v.clone())
-            }
-            Operator::ListMove(new) => {
-                let old_p = path.replace(path.len() - 1, PathElement::Index(new.clone()));
-                if let Some(PathElement::Index(i)) = old_p {
-                    Operator::ListMove(i)
-                } else {
-                    return Err(JsonError::BadPath);
-                }
-            }
-            Operator::ObjectInsert(v) => Operator::ObjectDelete(v.clone()),
-            Operator::ObjectDelete(v) => Operator::ObjectInsert(v.clone()),
-            Operator::ObjectReplace(new_v, old_v) => {
-                Operator::ObjectReplace(old_v.clone(), new_v.clone())
-            }
-        };
-        Ok(OperationComponent::new(path, operator))
     }
 
     pub fn compose(&self, a: &Operation, b: &Operation) -> Result<Operation> {
@@ -220,7 +188,7 @@ impl Transformer {
                             return Ok(vec![OperationComponent::new(
                                 new_op.path,
                                 Operator::ListReplace(new_li.clone(), li_v.clone()),
-                            )]);
+                            )?]);
                         } else {
                             return Ok(vec![]);
                         }
@@ -300,7 +268,7 @@ impl Transformer {
                         return Ok(vec![OperationComponent::new(
                             new_op.path.clone(),
                             Operator::ListInsert(li.clone()),
-                        )]);
+                        )?]);
                     }
                 }
             }
