@@ -275,7 +275,7 @@ impl OperationComponent {
         OperationComponent::new(path, operator)
     }
 
-    pub fn merge(&mut self, op: &OperationComponent) -> bool {
+    pub fn merge(&mut self, op: OperationComponent) -> Option<OperationComponent> {
         if let Some(new_operator) = match &self.operator {
             Operator::Noop() => Some(op.operator.clone()),
             Operator::AddNumber(v1) => match &op.operator {
@@ -360,10 +360,10 @@ impl OperationComponent {
             _ => None,
         } {
             _ = mem::replace(&mut self.operator, new_operator);
-            return true;
+            return None;
         }
 
-        false
+        Some(op)
     }
 
     pub fn consume(&mut self, common_path: &Path, op: &OperationComponent) -> Result<()> {
@@ -417,6 +417,15 @@ impl Validation for OperationComponent {
     }
 }
 
+impl Validation for Vec<OperationComponent> {
+    fn validates(&self) -> Result<()> {
+        for op in self.iter() {
+            op.validates()?;
+        }
+        Ok(())
+    }
+}
+
 impl TryFrom<&str> for OperationComponent {
     type Error = JsonError;
 
@@ -459,9 +468,16 @@ pub struct Operation {
 }
 
 impl Operation {
-    pub fn append(&mut self, op: &OperationComponent) -> Result<()> {
-        op.validates()?;
+    pub fn empty_operation() -> Operation {
+        Operation { operations: vec![] }
+    }
 
+    pub fn new(operations: Vec<OperationComponent>) -> Result<Operation> {
+        operations.validates()?;
+        Ok(Operation { operations })
+    }
+
+    pub fn append(&mut self, op: OperationComponent) -> Result<()> {
         if let Operator::ListMove(m) = op.operator {
             if op
                 .path
@@ -474,25 +490,29 @@ impl Operation {
         }
 
         if self.is_empty() {
-            self.push(op.clone());
+            self.push(op);
             return Ok(());
         }
 
         let last = self.last_mut().unwrap();
-        if last.path.eq(&op.path) && last.merge(op) {
-            if last.operator.eq(&Operator::Noop()) {
-                self.pop();
+        if last.path.eq(&op.path) {
+            if let Some(o) = last.merge(op) {
+                self.push(o);
+            } else {
+                if last.operator.eq(&Operator::Noop()) {
+                    self.pop();
+                }
+                return Ok(());
             }
-            return Ok(());
+        } else {
+            self.push(op);
         }
-        self.push(op.clone());
+
         Ok(())
     }
 
-    pub fn compose(mut self, b: &Operation) -> Result<Operation> {
-        self.validates()?;
-
-        for op in b.iter() {
+    pub fn compose(mut self, other: Operation) -> Result<Operation> {
+        for op in other.into_iter() {
             self.append(op)?;
         }
 
@@ -526,10 +546,7 @@ impl IntoIterator for Operation {
 
 impl Validation for Operation {
     fn validates(&self) -> Result<()> {
-        for op in self.operations.iter() {
-            op.validates()?;
-        }
-        Ok(())
+        self.operations.validates()
     }
 }
 
@@ -563,7 +580,7 @@ impl TryFrom<Value> for Operation {
                 operations.push(value.try_into()?);
             }
         }
-        Ok(Operation { operations })
+        Operation::new(operations)
     }
 }
 
