@@ -488,6 +488,16 @@ impl Operation {
         self.push(op.clone());
         Ok(())
     }
+
+    pub fn compose(mut self, b: &Operation) -> Result<Operation> {
+        self.validates()?;
+
+        for op in b.iter() {
+            self.append(op)?;
+        }
+
+        Ok(self)
+    }
 }
 
 impl Deref for Operation {

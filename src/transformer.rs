@@ -65,17 +65,6 @@ impl Transformer {
         self.transform_matrix(operation.clone(), base_operation.clone())
     }
 
-    pub fn compose(&self, a: &Operation, b: &Operation) -> Result<Operation> {
-        a.validates()?;
-
-        let mut ret: Operation = a.clone();
-        for op in b.iter() {
-            ret.append(op)?;
-        }
-
-        Ok(ret)
-    }
-
     fn transform_matrix(
         &self,
         operation: Operation,
