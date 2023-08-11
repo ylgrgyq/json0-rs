@@ -4,7 +4,7 @@ use crate::common::Validation;
 use crate::error::Result;
 use crate::operation::{Operation, OperationComponent, Operator};
 use crate::path::PathElement;
-use crate::sub_type::CustomSubTypeHolder;
+use crate::sub_type::SubTypeFunctionsHolder;
 
 fn is_equivalent_to_noop(op: &OperationComponent) -> bool {
     match &op.operator {
@@ -32,11 +32,11 @@ pub enum TransformSide {
     RIGHT,
 }
 pub struct Transformer {
-    sub_type_holder: Rc<CustomSubTypeHolder>,
+    sub_type_holder: Rc<SubTypeFunctionsHolder>,
 }
 
 impl<'a> Transformer {
-    pub fn new(sub_type_holder: Rc<CustomSubTypeHolder>) -> Transformer {
+    pub fn new(sub_type_holder: Rc<SubTypeFunctionsHolder>) -> Transformer {
         Transformer { sub_type_holder }
     }
 

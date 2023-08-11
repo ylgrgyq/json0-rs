@@ -1,11 +1,11 @@
-use std::{collections::HashMap, rc::Rc, sync::Arc};
+use std::rc::Rc;
 
 use error::Result;
 use json::{Appliable, Routable};
 use operation::Operation;
 use path::Path;
 use serde_json::Value;
-use sub_type::{CustomSubTypeHolder, SubTypeTransformer};
+use sub_type::{SubTypeFunctions, SubTypeFunctionsHolder};
 use transformer::Transformer;
 
 mod common;
@@ -14,23 +14,23 @@ pub mod json;
 pub mod operation;
 pub mod path;
 mod sub_type;
-pub mod transformer;
+mod transformer;
 
 #[cfg(test)]
 #[macro_use]
 extern crate assert_matches;
 
-struct Json0 {
-    sub_type_holder: Rc<CustomSubTypeHolder>,
+pub struct Json0 {
+    functions: Rc<SubTypeFunctionsHolder>,
     transformer: Transformer,
 }
 
 impl Json0 {
     pub fn new() -> Json0 {
-        let sub_type_holder = Rc::new(CustomSubTypeHolder::new());
-        let transformer = Transformer::new(sub_type_holder.clone());
+        let functions = Rc::new(SubTypeFunctionsHolder::new());
+        let transformer = Transformer::new(functions.clone());
         Json0 {
-            sub_type_holder,
+            functions,
             transformer,
         }
     }
@@ -38,17 +38,17 @@ impl Json0 {
     pub fn register_subtype(
         &self,
         sub_type: String,
-        o: Box<dyn SubTypeTransformer>,
-    ) -> Result<Option<Box<dyn SubTypeTransformer>>> {
-        self.sub_type_holder.register_subtype(sub_type, o)
+        o: Box<dyn SubTypeFunctions>,
+    ) -> Result<Option<Box<dyn SubTypeFunctions>>> {
+        self.functions.register_subtype(sub_type, o)
     }
 
-    pub fn unregister_subtype(&self, sub_type: String) -> Option<Box<dyn SubTypeTransformer>> {
-        self.sub_type_holder.unregister_subtype(sub_type)
+    pub fn unregister_subtype(&self, sub_type: String) -> Option<Box<dyn SubTypeFunctions>> {
+        self.functions.unregister_subtype(sub_type)
     }
 
     pub fn clear_registered_subtype(&self) {
-        self.sub_type_holder.clear();
+        self.functions.clear();
     }
 
     pub fn apply(&mut self, value: &mut Value, operations: Vec<Operation>) -> Result<()> {
@@ -62,5 +62,13 @@ impl Json0 {
 
     pub fn get<'a, 'b>(&self, value: &'a mut Value, paths: &'b Path) -> Result<Option<&'a Value>> {
         value.route_get(paths)
+    }
+
+    pub fn transform(
+        &self,
+        operation: &Operation,
+        base_operation: &Operation,
+    ) -> Result<(Operation, Operation)> {
+        self.transformer.transform(operation, base_operation)
     }
 }

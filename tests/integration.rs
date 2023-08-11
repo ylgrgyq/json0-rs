@@ -3,7 +3,7 @@ use log::{debug, info};
 use my_json0::error::{JsonError, Result};
 use my_json0::json::JSON;
 use my_json0::operation::Operation;
-use my_json0::transformer::Transformer;
+use my_json0::Json0;
 use serde_json::Value;
 use std::fmt::Display;
 use std::fs::File;
@@ -61,8 +61,8 @@ struct TransformTest {
     result_right: Operation,
 }
 
-impl Test<Transformer> for TransformTest {
-    fn test(&self, executor: &Transformer) {
+impl Test<Json0> for TransformTest {
+    fn test(&self, executor: &Json0) {
         info!(
             "execute test transform at line: {} left: {} right: {}",
             self.line, self.input_left, self.input_right
@@ -87,19 +87,19 @@ impl Display for TransformTest {
 
 struct TransformTestPattern<'a> {
     test_input_file_path: &'a str,
-    transformer: Transformer,
+    transformer: Json0,
 }
 
 impl<'a> TransformTestPattern<'a> {
     fn new(p: &'a str) -> TransformTestPattern<'a> {
         TransformTestPattern {
             test_input_file_path: p,
-            transformer: Transformer::new(),
+            transformer: Json0::new(),
         }
     }
 }
 
-impl<'a> TestPattern<TransformTest, Transformer> for TransformTestPattern<'a> {
+impl<'a> TestPattern<TransformTest, Json0> for TransformTestPattern<'a> {
     fn load<I: Iterator<Item = (usize, Value)>>(
         &self,
         input: &mut I,
@@ -121,7 +121,7 @@ impl<'a> TestPattern<TransformTest, Transformer> for TransformTestPattern<'a> {
         return Ok(None);
     }
 
-    fn executor(&self) -> &Transformer {
+    fn executor(&self) -> &Json0 {
         &self.transformer
     }
 

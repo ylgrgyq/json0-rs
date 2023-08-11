@@ -10,7 +10,7 @@ use crate::operation::OperationComponent;
 const NUMBER_ADD_SUB_TYPE_NAME: &str = "na";
 const TEXT_SUB_TYPE_NAME: &str = "text";
 
-pub trait SubTypeTransformer {
+pub trait SubTypeFunctions {
     fn compose(&self);
     fn transform(&self);
     fn invert(&self, o: &OperationComponent) -> Result<OperationComponent>;
@@ -60,13 +60,13 @@ impl Display for SubType {
     }
 }
 
-pub struct CustomSubTypeHolder {
-    subtype_operators: DashMap<SubType, Box<dyn SubTypeTransformer>>,
+pub struct SubTypeFunctionsHolder {
+    subtype_operators: DashMap<SubType, Box<dyn SubTypeFunctions>>,
 }
 
-impl CustomSubTypeHolder {
-    pub fn new() -> CustomSubTypeHolder {
-        CustomSubTypeHolder {
+impl SubTypeFunctionsHolder {
+    pub fn new() -> SubTypeFunctionsHolder {
+        SubTypeFunctionsHolder {
             subtype_operators: DashMap::new(),
         }
     }
@@ -74,8 +74,8 @@ impl CustomSubTypeHolder {
     pub fn register_subtype(
         &self,
         sub_type: String,
-        o: Box<dyn SubTypeTransformer>,
-    ) -> Result<Option<Box<dyn SubTypeTransformer>>> {
+        o: Box<dyn SubTypeFunctions>,
+    ) -> Result<Option<Box<dyn SubTypeFunctions>>> {
         if sub_type.eq(NUMBER_ADD_SUB_TYPE_NAME) || sub_type.eq(TEXT_SUB_TYPE_NAME) {
             return Err(JsonError::ConflictSubType(sub_type));
         }
@@ -83,7 +83,7 @@ impl CustomSubTypeHolder {
         Ok(self.subtype_operators.insert(SubType::Custome(sub_type), o))
     }
 
-    pub fn unregister_subtype(&self, sub_type: String) -> Option<Box<dyn SubTypeTransformer>> {
+    pub fn unregister_subtype(&self, sub_type: String) -> Option<Box<dyn SubTypeFunctions>> {
         if sub_type.eq(NUMBER_ADD_SUB_TYPE_NAME) || sub_type.eq(TEXT_SUB_TYPE_NAME) {
             return None;
         }
@@ -93,7 +93,7 @@ impl CustomSubTypeHolder {
             .map(|s| s.1)
     }
 
-    pub fn get(&self, sub_type: SubType) -> Option<Ref<SubType, Box<dyn SubTypeTransformer>>> {
+    pub fn get(&self, sub_type: SubType) -> Option<Ref<SubType, Box<dyn SubTypeFunctions>>> {
         self.subtype_operators.get(&sub_type)
     }
 
