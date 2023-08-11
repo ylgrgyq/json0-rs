@@ -23,6 +23,8 @@ pub enum JsonError {
     /// Error serializing or deserializing a value
     #[error("Invalid JSON key or value")]
     SerdeError(#[from] serde_json::Error),
+    #[error("Sub type name: {0} conflict with internal sub type name")]
+    ConflictSubType(String),
 }
 
 pub type Result<T> = std::result::Result<T, JsonError>;

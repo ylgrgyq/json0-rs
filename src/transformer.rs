@@ -1,7 +1,10 @@
+use std::rc::Rc;
+
 use crate::common::Validation;
 use crate::error::Result;
 use crate::operation::{Operation, OperationComponent, Operator};
 use crate::path::PathElement;
+use crate::sub_type::CustomSubTypeHolder;
 
 fn is_equivalent_to_noop(op: &OperationComponent) -> bool {
     match &op.operator {
@@ -28,11 +31,13 @@ pub enum TransformSide {
     LEFT,
     RIGHT,
 }
-pub struct Transformer {}
+pub struct Transformer {
+    sub_type_holder: Rc<CustomSubTypeHolder>,
+}
 
-impl Transformer {
-    pub fn new() -> Transformer {
-        Transformer {}
+impl<'a> Transformer {
+    pub fn new(sub_type_holder: Rc<CustomSubTypeHolder>) -> Transformer {
+        Transformer { sub_type_holder }
     }
 
     pub fn transform(

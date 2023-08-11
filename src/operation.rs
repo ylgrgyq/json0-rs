@@ -13,50 +13,8 @@ use crate::{
     error::{self, Result},
     json::Appliable,
     path::{Path, PathElement},
+    sub_type::SubType,
 };
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum SubType {
-    NumberAdd,
-    Text,
-    Custome(String),
-}
-
-impl TryFrom<&Value> for SubType {
-    type Error = JsonError;
-
-    fn try_from(value: &Value) -> std::result::Result<Self, Self::Error> {
-        match value {
-            Value::String(sub) => {
-                if sub.eq("na") {
-                    return Ok(SubType::NumberAdd);
-                }
-                if sub.eq("text") {
-                    return Ok(SubType::Text);
-                }
-                return Ok(SubType::Custome(sub.to_string()));
-            }
-            _ => {
-                return Err(JsonError::InvalidOperation(format!(
-                    "invalid sub type: {}",
-                    value
-                )))
-            }
-        }
-    }
-}
-
-impl Display for SubType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s: String = match self {
-            SubType::NumberAdd => "na".into(),
-            SubType::Text => "text".into(),
-            SubType::Custome(t) => t.to_string(),
-        };
-        f.write_str(&s)?;
-        Ok(())
-    }
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operator {

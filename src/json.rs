@@ -8,7 +8,7 @@ use crate::{
 
 use serde_json::Value;
 
-trait Routable {
+pub trait Routable {
     fn route_get(&self, paths: &Path) -> Result<Option<&Value>>;
 
     fn route_get_mut(&mut self, paths: &Path) -> Result<Option<&mut Value>>;
