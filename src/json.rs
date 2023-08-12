@@ -4,6 +4,7 @@ use crate::{
     error::{JsonError, Result},
     operation::{Operation, OperationComponent, Operator},
     path::Path,
+    sub_type::{SubTypeFunctions, SubTypeFunctionsHolder},
 };
 
 use serde_json::Value;
@@ -15,7 +16,12 @@ pub trait Routable {
 }
 
 pub trait Appliable {
-    fn apply(&mut self, paths: Path, operator: OperationComponent) -> Result<()>;
+    fn apply(
+        &mut self,
+        paths: Path,
+        operator: Operator,
+        sub_type_functions: &SubTypeFunctionsHolder,
+    ) -> Result<()>;
 }
 
 impl Routable for Value {
@@ -110,18 +116,24 @@ impl Routable for Vec<serde_json::Value> {
 }
 
 impl Appliable for Value {
-    fn apply(&mut self, paths: Path, op: OperationComponent) -> Result<()> {
+    fn apply(
+        &mut self,
+        paths: Path,
+        op: Operator,
+        sub_type_functions: &SubTypeFunctionsHolder,
+    ) -> Result<()> {
         if paths.len() > 1 {
             let (left, right) = paths.split_at(paths.len() - 1);
-            return self
-                .route_get_mut(&left)?
-                .ok_or(JsonError::BadPath)?
-                .apply(right, op);
+            return self.route_get_mut(&left)?.ok_or(JsonError::BadPath)?.apply(
+                right,
+                op,
+                sub_type_functions,
+            );
         }
         match self {
-            Value::Array(array) => array.apply(paths, op),
-            Value::Object(obj) => obj.apply(paths, op),
-            Value::Number(n) => match op.operator {
+            Value::Array(array) => array.apply(paths, op, sub_type_functions),
+            Value::Object(obj) => obj.apply(paths, op, sub_type_functions),
+            Value::Number(n) => match op {
                 Operator::AddNumber(v) => {
                     let new_v = n.as_u64().unwrap() + v.as_u64().unwrap();
                     let serde_v = serde_json::to_value(new_v)?;
@@ -144,15 +156,20 @@ impl Appliable for Value {
 }
 
 impl Appliable for serde_json::Map<String, serde_json::Value> {
-    fn apply(&mut self, paths: Path, op: OperationComponent) -> Result<()> {
+    fn apply(
+        &mut self,
+        paths: Path,
+        op: Operator,
+        sub_type_functions: &SubTypeFunctionsHolder,
+    ) -> Result<()> {
         assert!(paths.len() == 1);
 
         let k = paths.first_key_path().ok_or(JsonError::BadPath)?;
         let target_value = self.get_mut(k);
-        match &op.operator {
+        match &op {
             Operator::AddNumber(v) => {
                 if let Some(old_v) = target_value {
-                    old_v.apply(paths, op)
+                    old_v.apply(paths, op, sub_type_functions)
                 } else {
                     self.insert(k.clone(), v.clone());
                     Ok(())
@@ -188,12 +205,17 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
 }
 
 impl Appliable for Vec<serde_json::Value> {
-    fn apply(&mut self, paths: Path, op: OperationComponent) -> Result<()> {
+    fn apply(
+        &mut self,
+        paths: Path,
+        op: Operator,
+        sub_type_functions: &SubTypeFunctionsHolder,
+    ) -> Result<()> {
         assert!(paths.len() == 1);
 
         let index = paths.first_index_path().ok_or(JsonError::BadPath)?;
         let target_value = self.get_mut(*index);
-        match &op.operator {
+        match op {
             Operator::AddNumber(v) => {
                 if let Some(old_v) = target_value {
                     match old_v {
@@ -240,10 +262,10 @@ impl Appliable for Vec<serde_json::Value> {
             }
             Operator::ListMove(new_index) => {
                 if let Some(target_v) = target_value {
-                    if *index != *new_index {
+                    if *index != new_index {
                         let new_v = target_v.clone();
                         self.remove(*index);
-                        self.insert(*new_index, new_v);
+                        self.insert(new_index, new_v);
                     }
                 }
                 Ok(())
@@ -268,7 +290,11 @@ impl JSON {
     pub fn apply(&mut self, operations: Vec<Operation>) -> Result<()> {
         for operation in operations {
             for op_comp in operation.into_iter() {
-                self.value.apply(op_comp.path.clone(), op_comp)?;
+                self.value.apply(
+                    op_comp.path.clone(),
+                    op_comp.operator,
+                    &SubTypeFunctionsHolder::new(),
+                )?;
             }
         }
         Ok(())

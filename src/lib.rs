@@ -43,7 +43,7 @@ impl Json0 {
         self.functions.register_subtype(sub_type, o)
     }
 
-    pub fn unregister_subtype(&self, sub_type: String) -> Option<Box<dyn SubTypeFunctions>> {
+    pub fn unregister_subtype(&self, sub_type: &String) -> Option<Box<dyn SubTypeFunctions>> {
         self.functions.unregister_subtype(sub_type)
     }
 
@@ -53,14 +53,18 @@ impl Json0 {
 
     pub fn apply(&mut self, value: &mut Value, operations: Vec<Operation>) -> Result<()> {
         for operation in operations {
-            for op_comp in operation.into_iter() {
-                value.apply(op_comp.path.clone(), op_comp)?;
+            for op in operation.into_iter() {
+                value.apply(op.path.clone(), op.operator, &self.functions)?;
             }
         }
         Ok(())
     }
 
-    pub fn get<'a, 'b>(&self, value: &'a mut Value, paths: &'b Path) -> Result<Option<&'a Value>> {
+    pub fn get_by_path<'a, 'b>(
+        &self,
+        value: &'a mut Value,
+        paths: &'b Path,
+    ) -> Result<Option<&'a Value>> {
         value.route_get(paths)
     }
 

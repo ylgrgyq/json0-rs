@@ -13,7 +13,7 @@ use crate::{
     error::{self, Result},
     json::Appliable,
     path::{Path, PathElement},
-    sub_type::SubType,
+    sub_type::{SubType, SubTypeFunctionsHolder},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -333,7 +333,7 @@ impl OperationComponent {
                 let (_, p2) = op.path.split_at(common_path.len());
                 // v maybe cannot apply op.operator
                 // if that happen we do not consume op just leave self op
-                _ = v.apply(p2, op.clone());
+                _ = v.apply(p2, op.operator.clone(), &SubTypeFunctionsHolder::new());
             }
             _ => {}
         }

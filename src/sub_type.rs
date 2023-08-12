@@ -83,18 +83,18 @@ impl SubTypeFunctionsHolder {
         Ok(self.subtype_operators.insert(SubType::Custome(sub_type), o))
     }
 
-    pub fn unregister_subtype(&self, sub_type: String) -> Option<Box<dyn SubTypeFunctions>> {
+    pub fn unregister_subtype(&self, sub_type: &String) -> Option<Box<dyn SubTypeFunctions>> {
         if sub_type.eq(NUMBER_ADD_SUB_TYPE_NAME) || sub_type.eq(TEXT_SUB_TYPE_NAME) {
             return None;
         }
 
         self.subtype_operators
-            .remove(&SubType::Custome(sub_type))
+            .remove(&SubType::Custome(sub_type.clone()))
             .map(|s| s.1)
     }
 
-    pub fn get(&self, sub_type: SubType) -> Option<Ref<SubType, Box<dyn SubTypeFunctions>>> {
-        self.subtype_operators.get(&sub_type)
+    pub fn get(&self, sub_type: &SubType) -> Option<Ref<SubType, Box<dyn SubTypeFunctions>>> {
+        self.subtype_operators.get(sub_type)
     }
 
     pub fn clear(&self) {
