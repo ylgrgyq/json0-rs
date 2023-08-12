@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use error::Result;
 use json::{Appliable, Routable};
-use operation::Operation;
+use operation::{Operation, OperationFactory};
 use path::Path;
 use serde_json::Value;
 use sub_type::{SubTypeFunctions, SubTypeFunctionsHolder};
@@ -23,15 +23,19 @@ extern crate assert_matches;
 pub struct Json0 {
     functions: Rc<SubTypeFunctionsHolder>,
     transformer: Transformer,
+    operation_faction: OperationFactory,
 }
 
 impl Json0 {
     pub fn new() -> Json0 {
         let functions = Rc::new(SubTypeFunctionsHolder::new());
         let transformer = Transformer::new(functions.clone());
+        let operation_faction = OperationFactory::new(functions.clone());
+
         Json0 {
             functions,
             transformer,
+            operation_faction,
         }
     }
 
@@ -49,6 +53,10 @@ impl Json0 {
 
     pub fn clear_registered_subtype(&self) {
         self.functions.clear();
+    }
+
+    pub fn operation_factory(&self) -> &OperationFactory {
+        &self.operation_faction
     }
 
     pub fn apply(&self, value: &mut Value, operations: Vec<Operation>) -> Result<()> {

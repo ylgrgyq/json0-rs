@@ -2,6 +2,7 @@ use std::{
     fmt::{Debug, Display},
     mem,
     ops::{Deref, DerefMut},
+    rc::Rc,
     vec,
 };
 
@@ -12,7 +13,7 @@ use crate::{
     error::JsonError,
     error::{self, Result},
     path::{Path, PathElement},
-    sub_type::{SubType, SubTypeFunctions},
+    sub_type::{SubType, SubTypeFunctions, SubTypeFunctionsHolder},
 };
 
 pub enum Operator {
@@ -605,9 +606,191 @@ impl Display for Operation {
     }
 }
 
-struct OperationFactory {}
+pub struct ListOperationBuilder {
+    path: Path,
+    insert: Option<Value>,
+    delete: Option<Value>,
+    move_to: Option<usize>,
+}
 
-impl OperationFactory {}
+impl ListOperationBuilder {
+    fn new(path: Path) -> ListOperationBuilder {
+        ListOperationBuilder {
+            path,
+            insert: None,
+            delete: None,
+            move_to: None,
+        }
+    }
+
+    pub fn insert(mut self, val: Value) -> Self {
+        self.insert = Some(val);
+        self
+    }
+
+    pub fn delete(mut self, val: Value) -> Self {
+        self.delete = Some(val);
+        self
+    }
+
+    pub fn replace(mut self, old: Value, new: Value) -> Self {
+        self.insert = Some(new);
+        self.delete = Some(old);
+        self
+    }
+
+    pub fn move_to(mut self, new_index: usize) -> Self {
+        self.move_to = Some(new_index);
+        self
+    }
+
+    pub fn build(self) -> Result<OperationComponent> {
+        if let Some(new_index) = self.move_to {
+            return OperationComponent::new(self.path, Operator::ListMove(new_index));
+        }
+
+        if let Some(del_val) = self.delete {
+            if let Some(ins_val) = self.insert {
+                return OperationComponent::new(self.path, Operator::ListReplace(ins_val, del_val));
+            }
+            return OperationComponent::new(self.path, Operator::ListDelete(del_val));
+        }
+
+        if let Some(ins_val) = self.insert {
+            return OperationComponent::new(self.path, Operator::ListInsert(ins_val));
+        }
+
+        OperationComponent::new(self.path, Operator::Noop())
+    }
+}
+
+pub struct ObjectOperationBuilder {
+    path: Path,
+    insert: Option<Value>,
+    delete: Option<Value>,
+}
+
+impl ObjectOperationBuilder {
+    fn new(path: Path) -> ObjectOperationBuilder {
+        ObjectOperationBuilder {
+            path,
+            insert: None,
+            delete: None,
+        }
+    }
+
+    pub fn insert(mut self, val: Value) -> Self {
+        self.insert = Some(val);
+        self
+    }
+
+    pub fn delete(mut self, val: Value) -> Self {
+        self.delete = Some(val);
+        self
+    }
+
+    pub fn replace(mut self, old: Value, new: Value) -> Self {
+        self.insert = Some(new);
+        self.delete = Some(old);
+        self
+    }
+
+    pub fn build(self) -> Result<OperationComponent> {
+        if let Some(del_val) = self.delete {
+            if let Some(ins_val) = self.insert {
+                return OperationComponent::new(
+                    self.path,
+                    Operator::ObjectReplace(ins_val, del_val),
+                );
+            }
+            return OperationComponent::new(self.path, Operator::ObjectDelete(del_val));
+        }
+
+        if let Some(ins_val) = self.insert {
+            return OperationComponent::new(self.path, Operator::ObjectInsert(ins_val));
+        }
+
+        OperationComponent::new(self.path, Operator::Noop())
+    }
+}
+
+pub struct SubTypeOperationBuilder {
+    path: Path,
+    sub_type: SubType,
+    sub_type_operator: Option<Value>,
+    sub_type_function: Option<Box<dyn SubTypeFunctions>>,
+}
+
+impl SubTypeOperationBuilder {
+    fn new(
+        path: Path,
+        sub_type: SubType,
+        sub_type_function: Option<Box<dyn SubTypeFunctions>>,
+    ) -> SubTypeOperationBuilder {
+        SubTypeOperationBuilder {
+            path,
+            sub_type,
+            sub_type_operator: None,
+            sub_type_function,
+        }
+    }
+
+    pub fn sub_type_operator(mut self, val: Value) -> Self {
+        self.sub_type_operator = Some(val);
+        self
+    }
+
+    pub fn sub_type_functions(mut self, val: Box<dyn SubTypeFunctions>) -> Self {
+        self.sub_type_function = Some(val);
+        self
+    }
+
+    pub fn build(self) -> Result<OperationComponent> {
+        if let Some(o) = self.sub_type_operator {
+            if let Some(f) = self.sub_type_function {
+                return OperationComponent::new(self.path, Operator::SubType2(self.sub_type, o, f));
+            } else {
+                Err(JsonError::InvalidOperation(
+                    "sub type functions is required".into(),
+                ))
+            }
+        } else {
+            Err(JsonError::InvalidOperation(
+                "sub type operator is required".into(),
+            ))
+        }
+    }
+}
+
+pub struct OperationFactory {
+    sub_type_holder: Rc<SubTypeFunctionsHolder>,
+}
+
+impl OperationFactory {
+    pub fn new(sub_type_holder: Rc<SubTypeFunctionsHolder>) -> OperationFactory {
+        OperationFactory { sub_type_holder }
+    }
+
+    pub fn list_operation_builder(&self, path: Path) -> ListOperationBuilder {
+        ListOperationBuilder::new(path)
+    }
+
+    pub fn object_operation_builder(&self, path: Path) -> ObjectOperationBuilder {
+        ObjectOperationBuilder::new(path)
+    }
+
+    pub fn sub_type_operation_builder(
+        &self,
+        path: Path,
+        sub_type: SubType,
+    ) -> SubTypeOperationBuilder {
+        let f = self
+            .sub_type_holder
+            .get(&sub_type)
+            .map(|f| f.value().clone());
+        SubTypeOperationBuilder::new(path, sub_type, f)
+    }
+}
 
 #[cfg(test)]
 mod tests {
