@@ -23,7 +23,7 @@ fn is_equivalent_to_noop(op: &OperationComponent) -> bool {
         Operator::ListMove(lm) => op
             .path
             .last()
-            .and_then(|p| Some(p == &PathElement::Index(*lm)))
+            .map(|p| p == &PathElement::Index(*lm))
             .unwrap_or(false),
     }
 }
@@ -207,12 +207,7 @@ impl<'a> Transformer {
                 if base_op
                     .path
                     .get(base_operate_path.len())
-                    .and_then(|p1| {
-                        new_op
-                            .path
-                            .get(base_operate_path.len())
-                            .and_then(|p2| Some(p1 <= p2))
-                    })
+                    .and_then(|p1| new_op.path.get(base_operate_path.len()).map(|p2| p1 <= p2))
                     .unwrap_or(false)
                 {
                     new_op.path.increase_index(base_operate_path.len());
@@ -223,7 +218,7 @@ impl<'a> Transformer {
                         && base_op
                             .path
                             .get(base_operate_path.len())
-                            .and_then(|p| Some(p <= &PathElement::Index(*lm)))
+                            .map(|p| p <= &PathElement::Index(*lm))
                             .unwrap_or(false)
                     {
                         new_op.operator = Operator::ListMove(*lm + 1);
@@ -383,38 +378,32 @@ impl<'a> Transformer {
                                 if &from > other_from {
                                     new_op.path.decrease_index(base_operate_path.len());
                                 }
-                                if &from > &other_to {
+                                if from > other_to {
                                     new_op.path.increase_index(base_operate_path.len());
-                                } else if &from == &other_to {
-                                    if other_from > &other_to {
-                                        new_op.path.increase_index(base_operate_path.len());
-                                        if from == to {
-                                            n_lm += 1;
-                                        }
+                                } else if from == other_to && other_from > &other_to {
+                                    new_op.path.increase_index(base_operate_path.len());
+                                    if from == to {
+                                        n_lm += 1;
                                     }
                                 }
                                 if &to > other_from {
                                     n_lm -= 1;
-                                } else if &to == other_from {
-                                    if to > from {
-                                        n_lm -= 1;
-                                    }
+                                } else if &to == other_from && to > from {
+                                    n_lm -= 1;
                                 }
-                                if &to > &other_to {
+                                if to > other_to {
                                     n_lm += 1;
-                                } else if &to == &other_to {
+                                } else if to == other_to {
                                     if (&other_to > other_from && to > from)
                                         || (&other_to < other_from && to < from)
                                     {
                                         if side == TransformSide::RIGHT {
                                             n_lm += 1;
                                         }
-                                    } else {
-                                        if to > from {
-                                            n_lm += 1;
-                                        } else if &to == other_from {
-                                            n_lm -= 1;
-                                        }
+                                    } else if to > from {
+                                        n_lm += 1;
+                                    } else if &to == other_from {
+                                        n_lm -= 1;
                                     }
                                 }
                                 new_op.operator = Operator::ListMove(n_lm);
@@ -429,7 +418,7 @@ impl<'a> Transformer {
                             if &p > from {
                                 new_op.path.decrease_index(operate_index);
                             }
-                            if &p > &PathElement::Index(to) {
+                            if p > PathElement::Index(to) {
                                 new_op.path.increase_index(operate_index);
                             }
                             return Ok(vec![new_op]);
@@ -446,9 +435,9 @@ impl<'a> Transformer {
                     if &p > from {
                         new_op.path.decrease_index(base_operate_path.len());
                     }
-                    if &p > &to {
+                    if p > to {
                         new_op.path.increase_index(base_operate_path.len());
-                    } else if &p == &to && from > &to {
+                    } else if p == to && from > &to {
                         new_op.path.increase_index(base_operate_path.len());
                     }
                 }

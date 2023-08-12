@@ -799,6 +799,7 @@ mod tests {
 
     #[test]
     fn test_number_add_operator() {
+        let path: Path = r#"["p1","p2"]"#.try_into().unwrap();
         let op: OperationComponent = r#"{"p":["p1","p2"], "t":"na", "o":100}"#.try_into().unwrap();
 
         assert_eq!(
@@ -809,6 +810,7 @@ mod tests {
 
     #[test]
     fn test_text_operator() {
+        let path: Path = r#"["p1","p2"]"#.try_into().unwrap();
         let op: OperationComponent =
             r#"{"p":["p1","p2"], "t":"text", "o":{"p":["p3"],"si":"hello"}}"#
                 .try_into()

@@ -68,11 +68,7 @@ impl Json0 {
         Ok(())
     }
 
-    pub fn get_by_path<'a, 'b>(
-        &self,
-        value: &'a mut Value,
-        paths: &'b Path,
-    ) -> Result<Option<&'a Value>> {
+    pub fn get_by_path<'a>(&self, value: &'a mut Value, paths: &Path) -> Result<Option<&'a Value>> {
         value.route_get(paths)
     }
 
@@ -82,5 +78,11 @@ impl Json0 {
         base_operation: &Operation,
     ) -> Result<(Operation, Operation)> {
         self.transformer.transform(operation, base_operation)
+    }
+}
+
+impl Default for Json0 {
+    fn default() -> Self {
+        Self::new()
     }
 }
