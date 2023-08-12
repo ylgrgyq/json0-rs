@@ -11,6 +11,8 @@ use std::path::{Path, PathBuf};
 use std::vec;
 use test_log::test;
 
+const COMMENT_PREFIX: char = '#';
+
 fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
 where
     P: AsRef<Path>,
@@ -26,15 +28,13 @@ where
     let mut out = vec![];
     let mut line_number = 0;
     if let Ok(lines) = read_lines(file_name) {
-        for line in lines {
-            if let Ok(v) = line {
-                line_number += 1;
-                if !v.is_empty() && !v.starts_with("#") {
-                    let val = serde_json::from_str(&v).map_err(|e| {
-                        JsonError::UnexpectedError(format!("parse line: {} failed. {}", v, e))
-                    })?;
-                    out.push((line_number, val));
-                }
+        for line in lines.flatten() {
+            line_number += 1;
+            if !line.is_empty() && !line.starts_with(COMMENT_PREFIX) {
+                let val = serde_json::from_str(&line).map_err(|e| {
+                    JsonError::UnexpectedError(format!("parse line: {} failed. {}", line, e))
+                })?;
+                out.push((line_number, val));
             }
         }
     }
@@ -117,7 +117,7 @@ impl<'a> TestPattern<TransformTest, Json0> for TransformTestPattern<'a> {
             debug!("load test at line: {}\n{}", line, &test);
             return Ok(Some(test));
         }
-        return Ok(None);
+        Ok(None)
     }
 
     fn executor(&self) -> &Json0 {
@@ -143,9 +143,9 @@ struct ApplyOperationExecutor {
 }
 
 impl ApplyOperationExecutor {
-    fn apply(&self, json: &Value, operations: &Vec<Operation>) -> Result<Value> {
+    fn apply(&self, json: &Value, operations: &[Operation]) -> Result<Value> {
         let mut out = json.clone();
-        self.json0.apply(&mut out, operations.clone())?;
+        self.json0.apply(&mut out, operations.to_owned())?;
         Ok(out)
     }
 }
@@ -209,7 +209,7 @@ impl<'a> TestPattern<ApplyOperationTest, ApplyOperationExecutor> for ApplyOperat
             debug!("load test at line: {}\n{}", line, &test);
             return Ok(Some(test));
         }
-        return Ok(None);
+        Ok(None)
     }
 
     fn executor(&self) -> &ApplyOperationExecutor {
@@ -228,12 +228,9 @@ fn run_test<T: Test<E>, E, P: Sized + TestPattern<T, E>>(pattern: &P) -> Result<
     let json_values = read_json_value(&input_data_path)?;
     let transformer = pattern.executor();
     let mut iter = json_values.into_iter();
-    loop {
-        if let Some(test) = pattern.load(&mut iter)? {
-            test.test(&transformer);
-        } else {
-            break;
-        }
+
+    while let Some(test) = pattern.load(&mut iter)? {
+        test.test(transformer);
     }
 
     Ok(())

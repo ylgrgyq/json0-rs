@@ -37,7 +37,7 @@ pub struct Transformer {
     sub_type_holder: Rc<SubTypeFunctionsHolder>,
 }
 
-impl<'a> Transformer {
+impl Transformer {
     pub fn new(sub_type_holder: Rc<SubTypeFunctionsHolder>) -> Transformer {
         Transformer { sub_type_holder }
     }
@@ -386,9 +386,7 @@ impl<'a> Transformer {
                                         n_lm += 1;
                                     }
                                 }
-                                if &to > other_from {
-                                    n_lm -= 1;
-                                } else if &to == other_from && to > from {
+                                if &to > other_from || (&to == other_from && to > from) {
                                     n_lm -= 1;
                                 }
                                 if to > other_to {
@@ -435,9 +433,7 @@ impl<'a> Transformer {
                     if &p > from {
                         new_op.path.decrease_index(base_operate_path.len());
                     }
-                    if p > to {
-                        new_op.path.increase_index(base_operate_path.len());
-                    } else if p == to && from > &to {
+                    if p > to || (p == to && from > &to) {
                         new_op.path.increase_index(base_operate_path.len());
                     }
                 }

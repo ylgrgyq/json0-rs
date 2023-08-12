@@ -140,17 +140,13 @@ impl Appliable for Value {
                     _ = mem::replace(self, serde_v);
                     Ok(())
                 }
-                _ => {
-                    return Err(JsonError::InvalidOperation(
-                        "Only AddNumber operation can apply to a Number JSON Value".into(),
-                    ));
-                }
+                _ => Err(JsonError::InvalidOperation(
+                    "Only AddNumber operation can apply to a Number JSON Value".into(),
+                )),
             },
-            _ => {
-                return Err(JsonError::InvalidOperation(
-                    "Operation can only apply on array or object".into(),
-                ));
-            }
+            _ => Err(JsonError::InvalidOperation(
+                "Operation can only apply on array or object".into(),
+            )),
         }
     }
 }
@@ -180,7 +176,7 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
                 Ok(())
             }
             Operator::ObjectDelete(_) => {
-                if let Some(_) = target_value {
+                if target_value.is_some() {
                     // we don't check the equality of the values
                     // because OT is hard to implement
                     // if target_v.eq(&delete_v) {
@@ -190,7 +186,7 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
                 Ok(())
             }
             Operator::ObjectReplace(new_v, _) => {
-                if let Some(_) = target_value {
+                if target_value.is_some() {
                     // we don't check the equality of the values
                     // because OT is hard to implement
                     // if target_v.eq(&old_v) {
@@ -225,7 +221,7 @@ impl Appliable for Vec<serde_json::Value> {
                             self[*index] = serde_v;
                             Ok(())
                         }
-                        _ => return Err(JsonError::BadPath),
+                        _ => Err(JsonError::BadPath),
                     }
                 } else {
                     self[*index] = v.clone();
@@ -241,7 +237,7 @@ impl Appliable for Vec<serde_json::Value> {
                 Ok(())
             }
             Operator::ListDelete(_) => {
-                if let Some(_) = target_value {
+                if target_value.is_some() {
                     // we don't check the equality of the values
                     // because OT is hard to implement
                     // if target_v.eq(&delete_v) {
@@ -251,7 +247,7 @@ impl Appliable for Vec<serde_json::Value> {
                 Ok(())
             }
             Operator::ListReplace(new_v, _) => {
-                if let Some(_) = target_value {
+                if target_value.is_some() {
                     // we don't check the equality of the values
                     // because OT is hard to implement
                     // if target_v.eq(&old_v) {

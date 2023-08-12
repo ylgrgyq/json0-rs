@@ -1,5 +1,4 @@
 use std::fmt::Display;
-use std::rc::Rc;
 
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
@@ -55,14 +54,12 @@ impl TryFrom<&Value> for SubType {
                 if sub.eq(TEXT_SUB_TYPE_NAME) {
                     return Ok(SubType::Text);
                 }
-                return Ok(SubType::Custome(sub.to_string()));
+                Ok(SubType::Custome(sub.to_string()))
             }
-            _ => {
-                return Err(JsonError::InvalidOperation(format!(
-                    "invalid sub type: {}",
-                    value
-                )))
-            }
+            _ => Err(JsonError::InvalidOperation(format!(
+                "invalid sub type: {}",
+                value
+            ))),
         }
     }
 }
@@ -77,14 +74,6 @@ impl Display for SubType {
         f.write_str(&s)?;
         Ok(())
     }
-}
-
-struct Wrapper<T: SubTypeFunctions> {
-    f: T,
-}
-
-pub struct SubTypeFunctionsHolder2<T: SubTypeFunctions> {
-    subtype_operators: DashMap<SubType, Wrapper<T>>,
 }
 
 pub struct SubTypeFunctionsHolder {
@@ -126,5 +115,11 @@ impl SubTypeFunctionsHolder {
 
     pub fn clear(&self) {
         self.subtype_operators.clear();
+    }
+}
+
+impl Default for SubTypeFunctionsHolder {
+    fn default() -> Self {
+        Self::new()
     }
 }

@@ -68,7 +68,7 @@ impl PartialEq for Operator {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::SubType(l0, l1), Self::SubType(r0, r1)) => l0 == r0 && l1 == r1,
-            (Self::SubType2(l0, l1, _), Self::SubType2(r0, r1, r2)) => l0 == r0 && l1 == r1,
+            (Self::SubType2(l0, l1, _), Self::SubType2(r0, r1, _)) => l0 == r0 && l1 == r1,
             (Self::AddNumber(l0), Self::AddNumber(r0)) => l0 == r0,
             (Self::ListInsert(l0), Self::ListInsert(r0)) => l0 == r0,
             (Self::ListDelete(l0), Self::ListDelete(r0)) => l0 == r0,
@@ -94,7 +94,7 @@ impl Clone for Operator {
             Self::ListInsert(arg0) => Self::ListInsert(arg0.clone()),
             Self::ListDelete(arg0) => Self::ListDelete(arg0.clone()),
             Self::ListReplace(arg0, arg1) => Self::ListReplace(arg0.clone(), arg1.clone()),
-            Self::ListMove(arg0) => Self::ListMove(arg0.clone()),
+            Self::ListMove(arg0) => Self::ListMove(*arg0),
             Self::ObjectInsert(arg0) => Self::ObjectInsert(arg0.clone()),
             Self::ObjectDelete(arg0) => Self::ObjectDelete(arg0.clone()),
             Self::ObjectReplace(arg0, arg1) => Self::ObjectReplace(arg0.clone(), arg1.clone()),
@@ -106,10 +106,7 @@ impl Operator {
     fn map_to_operator(obj: &Map<String, Value>) -> Result<Operator> {
         if let Some(t) = obj.get("t") {
             let sub_type = t.try_into()?;
-            let op = obj
-                .get("o")
-                .and_then(|o| Some(o.clone()))
-                .unwrap_or(Value::Null);
+            let op = obj.get("o").cloned().unwrap_or(Value::Null);
             return Ok(Operator::SubType(sub_type, op));
         }
 
@@ -173,10 +170,10 @@ impl Operator {
         if let Some(i) = val.as_u64() {
             return Ok(i as usize);
         }
-        return Err(JsonError::InvalidOperation(format!(
+        Err(JsonError::InvalidOperation(format!(
             "{} can not parsed to index",
-            val.to_string()
-        )));
+            val
+        )))
     }
 }
 
@@ -217,15 +214,15 @@ impl Display for Operator {
             Operator::Noop() => "".into(),
             Operator::SubType(t, o) => format!("t: {}, o: {}", t, o),
             Operator::SubType2(t, o, _) => format!("t: {}, o: {}", t, o),
-            Operator::AddNumber(n) => format!("na: {}", n.to_string()),
-            Operator::ListInsert(i) => format!("li: {}", i.to_string()),
-            Operator::ListDelete(d) => format!("ld: {}", d.to_string()),
-            Operator::ListReplace(i, d) => format!("li: {}, ld: {}", i.to_string(), d.to_string()),
-            Operator::ListMove(m) => format!("lm: {}", m.to_string()),
-            Operator::ObjectInsert(i) => format!("oi: {}", i.to_string()),
-            Operator::ObjectDelete(d) => format!("od: {}", d.to_string()),
+            Operator::AddNumber(n) => format!("na: {}", n),
+            Operator::ListInsert(i) => format!("li: {}", i),
+            Operator::ListDelete(d) => format!("ld: {}", d),
+            Operator::ListReplace(i, d) => format!("li: {}, ld: {}", i, d),
+            Operator::ListMove(m) => format!("lm: {}", m),
+            Operator::ObjectInsert(i) => format!("oi: {}", i),
+            Operator::ObjectDelete(d) => format!("od: {}", d),
             Operator::ObjectReplace(i, d) => {
-                format!("oi: {}, od: {}", i.to_string(), d.to_string())
+                format!("oi: {}, od: {}", i, d)
             }
         };
         f.write_str(&s)?;
@@ -243,7 +240,7 @@ impl OperationComponent {
     pub fn new(path: Path, operator: Operator) -> Result<OperationComponent> {
         let op = OperationComponent { path, operator };
         op.validates()?;
-        return Ok(op);
+        Ok(op)
     }
 
     pub fn noop(&self) -> OperationComponent {
@@ -286,7 +283,7 @@ impl OperationComponent {
                 Operator::ListReplace(old_v.clone(), new_v.clone())
             }
             Operator::ListMove(new) => {
-                let old_p = path.replace(path.len() - 1, PathElement::Index(new.clone()));
+                let old_p = path.replace(path.len() - 1, PathElement::Index(*new));
                 if let Some(PathElement::Index(i)) = old_p {
                     Operator::ListMove(i)
                 } else {
@@ -748,7 +745,7 @@ impl SubTypeOperationBuilder {
     pub fn build(self) -> Result<OperationComponent> {
         if let Some(o) = self.sub_type_operator {
             if let Some(f) = self.sub_type_function {
-                return OperationComponent::new(self.path, Operator::SubType2(self.sub_type, o, f));
+                OperationComponent::new(self.path, Operator::SubType2(self.sub_type, o, f))
             } else {
                 Err(JsonError::InvalidOperation(
                     "sub type functions is required".into(),
@@ -799,7 +796,6 @@ mod tests {
 
     #[test]
     fn test_number_add_operator() {
-        let path: Path = r#"["p1","p2"]"#.try_into().unwrap();
         let op: OperationComponent = r#"{"p":["p1","p2"], "t":"na", "o":100}"#.try_into().unwrap();
 
         assert_eq!(
@@ -810,7 +806,6 @@ mod tests {
 
     #[test]
     fn test_text_operator() {
-        let path: Path = r#"["p1","p2"]"#.try_into().unwrap();
         let op: OperationComponent =
             r#"{"p":["p1","p2"], "t":"text", "o":{"p":["p3"],"si":"hello"}}"#
                 .try_into()

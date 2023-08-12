@@ -80,24 +80,18 @@ impl Path {
     }
 
     pub fn get_key_at(&self, index: usize) -> Option<&String> {
-        let first_path = self.paths.get(index);
-        if first_path.is_none() {
-            return None;
-        }
+        let first_path = self.paths.get(index)?;
 
-        match first_path.unwrap() {
+        match first_path {
             PathElement::Index(_) => None,
             PathElement::Key(k) => Some(k),
         }
     }
 
     pub fn get_index_at(&self, index: usize) -> Option<&usize> {
-        let first_path = self.paths.get(index);
-        if first_path.is_none() {
-            return None;
-        }
+        let first_path = self.paths.get(index)?;
 
-        match first_path.unwrap() {
+        match first_path {
             PathElement::Index(i) => Some(i),
             PathElement::Key(_) => None,
         }
@@ -108,29 +102,25 @@ impl Path {
     }
 
     pub fn replace(&mut self, index: usize, path_elem: PathElement) -> Option<PathElement> {
-        if let Some(_) = self.paths.get(index) {
+        if self.paths.get(index).is_some() {
             let o = std::mem::replace(&mut self.paths[index], path_elem);
             return Some(o);
         }
-        return None;
+        None
     }
 
     pub fn increase_index(&mut self, index: usize) -> bool {
-        if let Some(p) = self.paths.get(index) {
-            if let PathElement::Index(i) = p {
-                self.replace(index, PathElement::Index(i + 1));
-                return true;
-            }
+        if let Some(PathElement::Index(i)) = self.paths.get(index) {
+            self.replace(index, PathElement::Index(i + 1));
+            return true;
         }
         false
     }
 
     pub fn decrease_index(&mut self, index: usize) -> bool {
-        if let Some(p) = self.paths.get(index) {
-            if let PathElement::Index(i) = p {
-                self.replace(index, PathElement::Index(i - 1));
-                return true;
-            }
+        if let Some(PathElement::Index(i)) = self.paths.get(index) {
+            self.replace(index, PathElement::Index(i - 1));
+            return true;
         }
         false
     }
