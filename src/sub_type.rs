@@ -6,15 +6,28 @@ use serde_json::Value;
 
 use crate::error::{JsonError, Result};
 use crate::operation::OperationComponent;
+use crate::transformer::TransformSide;
 
 const NUMBER_ADD_SUB_TYPE_NAME: &str = "na";
 const TEXT_SUB_TYPE_NAME: &str = "text";
 
 pub trait SubTypeFunctions {
-    fn compose(&self);
-    fn transform(&self);
-    fn invert(&self) -> Result<OperationComponent>;
-    fn apply(&self);
+    fn compose(
+        &self,
+        base: &mut OperationComponent,
+        other: OperationComponent,
+    ) -> Option<OperationComponent>;
+
+    fn transform(
+        &self,
+        new: OperationComponent,
+        base: OperationComponent,
+        side: TransformSide,
+    ) -> Result<Vec<OperationComponent>>;
+
+    fn invert(&self, op: OperationComponent) -> Result<OperationComponent>;
+
+    fn apply(&self, val: &mut Value, op: OperationComponent) -> Result<()>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

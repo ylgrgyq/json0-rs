@@ -232,7 +232,7 @@ impl OperationComponent {
         OperationComponent::new(path, operator)
     }
 
-    pub fn merge(&mut self, op: OperationComponent) -> Option<OperationComponent> {
+    pub fn compose(&mut self, op: OperationComponent) -> Option<OperationComponent> {
         if let Some(new_operator) = match &self.operator {
             Operator::Noop() => Some(op.operator.clone()),
             Operator::AddNumber(v1) => match &op.operator {
@@ -437,7 +437,7 @@ impl Operation {
 
         let last = self.last_mut().unwrap();
         if last.path.eq(&op.path) {
-            if let Some(o) = last.merge(op) {
+            if let Some(o) = last.compose(op) {
                 self.push(o);
             } else {
                 if last.operator.eq(&Operator::Noop()) {
@@ -534,6 +534,10 @@ impl Display for Operation {
         Ok(())
     }
 }
+
+struct OperationFactory {}
+
+impl OperationFactory {}
 
 #[cfg(test)]
 mod tests {
