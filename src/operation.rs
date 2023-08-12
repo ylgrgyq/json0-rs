@@ -11,9 +11,8 @@ use crate::{
     common::Validation,
     error::JsonError,
     error::{self, Result},
-    json::Appliable,
     path::{Path, PathElement},
-    sub_type::{SubType, SubTypeFunctionsHolder},
+    sub_type::SubType,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -322,22 +321,6 @@ impl OperationComponent {
         }
 
         Some(op)
-    }
-
-    pub fn consume(&mut self, common_path: &Path, op: &OperationComponent) -> Result<()> {
-        match &mut self.operator {
-            Operator::ListDelete(v)
-            | Operator::ListReplace(_, v)
-            | Operator::ObjectDelete(v)
-            | Operator::ObjectReplace(_, v) => {
-                let (_, p2) = op.path.split_at(common_path.len());
-                // v maybe cannot apply op.operator
-                // if that happen we do not consume op just leave self op
-                _ = v.apply(p2, op.operator.clone(), &SubTypeFunctionsHolder::new());
-            }
-            _ => {}
-        }
-        Ok(())
     }
 
     pub fn operate_path(&self) -> Path {

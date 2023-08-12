@@ -10,7 +10,7 @@ use transformer::Transformer;
 
 mod common;
 pub mod error;
-pub mod json;
+mod json;
 pub mod operation;
 pub mod path;
 mod sub_type;

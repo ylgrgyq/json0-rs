@@ -2,8 +2,9 @@ use std::rc::Rc;
 
 use crate::common::Validation;
 use crate::error::Result;
+use crate::json::Appliable;
 use crate::operation::{Operation, OperationComponent, Operator};
-use crate::path::PathElement;
+use crate::path::{Path, PathElement};
 use crate::sub_type::SubTypeFunctionsHolder;
 
 fn is_equivalent_to_noop(op: &OperationComponent) -> bool {
@@ -158,7 +159,7 @@ impl<'a> Transformer {
         if base_operate_path.len() > new_operate_path.len() {
             // if base_op's path is longger and contains new_op's path, new_op should include base_op's effect
             if new_op.path.is_prefix_of(&base_op.path) {
-                new_op.consume(&max_common_path, base_op)?;
+                self.consume(&mut new_op, &max_common_path, base_op)?;
             }
             return Ok(vec![new_op]);
         }
@@ -455,5 +456,26 @@ impl<'a> Transformer {
         }
 
         Ok(vec![new_op])
+    }
+
+    pub fn consume(
+        &self,
+        op: &mut OperationComponent,
+        common_path: &Path,
+        other: &OperationComponent,
+    ) -> Result<()> {
+        match &mut op.operator {
+            Operator::ListDelete(v)
+            | Operator::ListReplace(_, v)
+            | Operator::ObjectDelete(v)
+            | Operator::ObjectReplace(_, v) => {
+                let (_, p2) = other.path.split_at(common_path.len());
+                // v maybe cannot apply other.operator
+                // if that happen we do not consume other just leave origin op
+                _ = v.apply(p2, other.operator.clone(), &self.sub_type_holder);
+            }
+            _ => {}
+        }
+        Ok(())
     }
 }
