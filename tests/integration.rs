@@ -1,7 +1,6 @@
 use itertools::Itertools;
 use log::{debug, info};
 use my_json0::error::{JsonError, Result};
-use my_json0::json::JSON;
 use my_json0::operation::Operation;
 use my_json0::Json0;
 use serde_json::Value;
@@ -134,17 +133,19 @@ impl<'a> TestPattern<TransformTest, Json0> for TransformTestPattern<'a> {
 
 #[derive(Debug)]
 struct ApplyOperationTest {
-    json: JSON,
+    json: Value,
     operations: Vec<Operation>,
     expect_result: Value,
 }
 
-struct ApplyOperationExecutor {}
+struct ApplyOperationExecutor {
+    json0: Json0,
+}
 
 impl ApplyOperationExecutor {
-    fn apply(&self, json: &JSON, operations: &Vec<Operation>) -> Result<JSON> {
+    fn apply(&self, json: &Value, operations: &Vec<Operation>) -> Result<Value> {
         let mut out = json.clone();
-        out.apply(operations.clone())?;
+        self.json0.apply(&mut out, operations.clone())?;
         Ok(out)
     }
 }
@@ -152,11 +153,7 @@ impl ApplyOperationExecutor {
 impl Test<ApplyOperationExecutor> for ApplyOperationTest {
     fn test(&self, executor: &ApplyOperationExecutor) {
         let r = executor.apply(&self.json, &self.operations).unwrap();
-        assert_eq!(
-            JSON::try_from(self.expect_result.clone()).unwrap(),
-            r,
-            "apply failed"
-        );
+        assert_eq!(self.expect_result.clone(), r, "apply failed");
     }
 }
 
@@ -179,7 +176,9 @@ impl<'a> ApplyOperationTestPattern<'a> {
     fn new(p: &'a str) -> ApplyOperationTestPattern<'a> {
         ApplyOperationTestPattern {
             test_input_file_path: p,
-            executor: ApplyOperationExecutor {},
+            executor: ApplyOperationExecutor {
+                json0: Json0::new(),
+            },
         }
     }
 }
@@ -203,7 +202,7 @@ impl<'a> TestPattern<ApplyOperationTest, ApplyOperationExecutor> for ApplyOperat
             }
 
             let test = ApplyOperationTest {
-                json: json.into(),
+                json,
                 operations,
                 expect_result,
             };

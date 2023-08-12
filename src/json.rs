@@ -1,10 +1,10 @@
-use std::{fmt::Display, mem};
+use std::mem;
 
 use crate::{
     error::{JsonError, Result},
-    operation::{Operation, OperationComponent, Operator},
+    operation::Operator,
     path::Path,
-    sub_type::{SubTypeFunctions, SubTypeFunctionsHolder},
+    sub_type::SubTypeFunctionsHolder,
 };
 
 use serde_json::Value;
@@ -275,51 +275,6 @@ impl Appliable for Vec<serde_json::Value> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct JSON {
-    value: Value,
-}
-
-impl Display for JSON {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.value.fmt(f)
-    }
-}
-
-impl JSON {
-    pub fn apply(&mut self, operations: Vec<Operation>) -> Result<()> {
-        for operation in operations {
-            for op_comp in operation.into_iter() {
-                self.value.apply(
-                    op_comp.path.clone(),
-                    op_comp.operator,
-                    &SubTypeFunctionsHolder::new(),
-                )?;
-            }
-        }
-        Ok(())
-    }
-
-    pub fn get(&self, paths: &Path) -> Result<Option<&Value>> {
-        self.value.route_get(paths)
-    }
-}
-
-impl From<Value> for JSON {
-    fn from(value: Value) -> Self {
-        JSON { value }
-    }
-}
-
-impl TryFrom<&str> for JSON {
-    type Error = JsonError;
-
-    fn try_from(input: &str) -> std::result::Result<Self, Self::Error> {
-        let value = serde_json::from_str(input)?;
-        Ok(JSON { value })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::path::Path;
@@ -329,55 +284,66 @@ mod tests {
 
     #[test]
     fn test_route_get_by_path_only_has_object() {
-        let json: JSON = r#"{"level1":"world", "level12":{"level2":"world2"}}"#
-            .try_into()
-            .unwrap();
+        let json: Value =
+            serde_json::from_str(r#"{"level1":"world", "level12":{"level2":"world2"}}"#).unwrap();
 
         // simple path with only object
         let paths = Path::try_from(r#"["level1"]"#).unwrap();
-        assert_eq!(json.get(&paths).unwrap().unwrap().to_string(), r#""world""#);
+        assert_eq!(
+            json.route_get(&paths).unwrap().unwrap().to_string(),
+            r#""world""#
+        );
         let paths = Path::try_from(r#"["level12", "level2"]"#).unwrap();
         assert_eq!(
-            json.get(&paths).unwrap().unwrap().to_string(),
+            json.route_get(&paths).unwrap().unwrap().to_string(),
             r#""world2""#
         );
         let paths = Path::try_from(r#"["level3"]"#).unwrap();
-        assert!(json.get(&paths).unwrap().is_none());
+        assert!(json.route_get(&paths).unwrap().is_none());
 
         // complex path with array
-        let json: JSON = r#"{"level1":[1,{"hello":[1,[7,8]]}], "level12":"world"}"#
-            .try_into()
-            .unwrap();
+        let json: Value =
+            serde_json::from_str(r#"{"level1":[1,{"hello":[1,[7,8]]}], "level12":"world"}"#)
+                .unwrap();
         let paths = Path::try_from(r#"["level1", 1, "hello"]"#).unwrap();
 
         assert_eq!(
-            json.get(&paths).unwrap().unwrap().to_string(),
+            json.route_get(&paths).unwrap().unwrap().to_string(),
             r#"[1,[7,8]]"#
         );
     }
 
     #[test]
     fn test_route_get_by_path_has_array() {
-        let json: JSON = r#"{"level1":["a","b"], "level12":[123, {"level2":["c","d"]}]}"#
-            .try_into()
-            .unwrap();
+        let json: Value =
+            serde_json::from_str(r#"{"level1":["a","b"], "level12":[123, {"level2":["c","d"]}]}"#)
+                .unwrap();
         // simple path
         let paths = Path::try_from(r#"["level1", 1]"#).unwrap();
-        assert_eq!(json.get(&paths).unwrap().unwrap().to_string(), r#""b""#);
+        assert_eq!(
+            json.route_get(&paths).unwrap().unwrap().to_string(),
+            r#""b""#
+        );
         let paths = Path::try_from(r#"["level12", 0]"#).unwrap();
 
         // complex path
-        assert_eq!(json.get(&paths).unwrap().unwrap().to_string(), r#"123"#);
+        assert_eq!(
+            json.route_get(&paths).unwrap().unwrap().to_string(),
+            r#"123"#
+        );
         let paths = Path::try_from(r#"["level12", 1, "level2"]"#).unwrap();
         assert_eq!(
-            json.get(&paths).unwrap().unwrap().to_string(),
+            json.route_get(&paths).unwrap().unwrap().to_string(),
             r#"["c","d"]"#
         );
-        let json: JSON = r#"{"level1":[1,{"hello":[1,[7,8]]}], "level12":"world"}"#
-            .try_into()
-            .unwrap();
+        let json: Value =
+            serde_json::from_str(r#"{"level1":[1,{"hello":[1,[7,8]]}], "level12":"world"}"#)
+                .unwrap();
         let paths = Path::try_from(r#"["level1", 1, "hello", 1]"#).unwrap();
 
-        assert_eq!(json.get(&paths).unwrap().unwrap().to_string(), r#"[7,8]"#);
+        assert_eq!(
+            json.route_get(&paths).unwrap().unwrap().to_string(),
+            r#"[7,8]"#
+        );
     }
 }

@@ -13,7 +13,7 @@ const TEXT_SUB_TYPE_NAME: &str = "text";
 pub trait SubTypeFunctions {
     fn compose(&self);
     fn transform(&self);
-    fn invert(&self, o: &OperationComponent) -> Result<OperationComponent>;
+    fn invert(&self) -> Result<OperationComponent>;
     fn apply(&self);
 }
 

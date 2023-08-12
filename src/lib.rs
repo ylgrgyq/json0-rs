@@ -51,7 +51,7 @@ impl Json0 {
         self.functions.clear();
     }
 
-    pub fn apply(&mut self, value: &mut Value, operations: Vec<Operation>) -> Result<()> {
+    pub fn apply(&self, value: &mut Value, operations: Vec<Operation>) -> Result<()> {
         for operation in operations {
             for op in operation.into_iter() {
                 value.apply(op.path.clone(), op.operator, &self.functions)?;
