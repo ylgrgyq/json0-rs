@@ -1,5 +1,5 @@
 use std::{
-    fmt::Display,
+    fmt::{Debug, Display},
     mem,
     ops::{Deref, DerefMut},
     vec,
@@ -12,13 +12,13 @@ use crate::{
     error::JsonError,
     error::{self, Result},
     path::{Path, PathElement},
-    sub_type::SubType,
+    sub_type::{SubType, SubTypeFunctions},
 };
 
-#[derive(Debug, Clone, PartialEq)]
 pub enum Operator {
     Noop(),
     SubType(SubType, Value),
+    SubType2(SubType, Value, Box<dyn SubTypeFunctions>),
     AddNumber(Value),
     ListInsert(Value),
     ListDelete(Value),
@@ -33,6 +33,72 @@ pub enum Operator {
     // First value is the new value.
     // Last value is the old value.
     ObjectReplace(Value, Value),
+}
+
+impl Debug for Operator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Noop() => f.debug_tuple("Noop").finish(),
+            Self::SubType(arg0, arg1) => f.debug_tuple("SubType").field(arg0).field(arg1).finish(),
+            Self::SubType2(arg0, arg1, _) => {
+                f.debug_tuple("SubType2").field(arg0).field(arg1).finish()
+            }
+            Self::AddNumber(arg0) => f.debug_tuple("AddNumber").field(arg0).finish(),
+            Self::ListInsert(arg0) => f.debug_tuple("ListInsert").field(arg0).finish(),
+            Self::ListDelete(arg0) => f.debug_tuple("ListDelete").field(arg0).finish(),
+            Self::ListReplace(arg0, arg1) => f
+                .debug_tuple("ListReplace")
+                .field(arg0)
+                .field(arg1)
+                .finish(),
+            Self::ListMove(arg0) => f.debug_tuple("ListMove").field(arg0).finish(),
+            Self::ObjectInsert(arg0) => f.debug_tuple("ObjectInsert").field(arg0).finish(),
+            Self::ObjectDelete(arg0) => f.debug_tuple("ObjectDelete").field(arg0).finish(),
+            Self::ObjectReplace(arg0, arg1) => f
+                .debug_tuple("ObjectReplace")
+                .field(arg0)
+                .field(arg1)
+                .finish(),
+        }
+    }
+}
+
+impl PartialEq for Operator {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::SubType(l0, l1), Self::SubType(r0, r1)) => l0 == r0 && l1 == r1,
+            (Self::SubType2(l0, l1, _), Self::SubType2(r0, r1, r2)) => l0 == r0 && l1 == r1,
+            (Self::AddNumber(l0), Self::AddNumber(r0)) => l0 == r0,
+            (Self::ListInsert(l0), Self::ListInsert(r0)) => l0 == r0,
+            (Self::ListDelete(l0), Self::ListDelete(r0)) => l0 == r0,
+            (Self::ListReplace(l0, l1), Self::ListReplace(r0, r1)) => l0 == r0 && l1 == r1,
+            (Self::ListMove(l0), Self::ListMove(r0)) => l0 == r0,
+            (Self::ObjectInsert(l0), Self::ObjectInsert(r0)) => l0 == r0,
+            (Self::ObjectDelete(l0), Self::ObjectDelete(r0)) => l0 == r0,
+            (Self::ObjectReplace(l0, l1), Self::ObjectReplace(r0, r1)) => l0 == r0 && l1 == r1,
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
+    }
+}
+
+impl Clone for Operator {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Noop() => Self::Noop(),
+            Self::SubType(arg0, arg1) => Self::SubType(arg0.clone(), arg1.clone()),
+            Self::SubType2(arg0, arg1, arg2) => {
+                Self::SubType2(arg0.clone(), arg1.clone(), arg2.clone())
+            }
+            Self::AddNumber(arg0) => Self::AddNumber(arg0.clone()),
+            Self::ListInsert(arg0) => Self::ListInsert(arg0.clone()),
+            Self::ListDelete(arg0) => Self::ListDelete(arg0.clone()),
+            Self::ListReplace(arg0, arg1) => Self::ListReplace(arg0.clone(), arg1.clone()),
+            Self::ListMove(arg0) => Self::ListMove(arg0.clone()),
+            Self::ObjectInsert(arg0) => Self::ObjectInsert(arg0.clone()),
+            Self::ObjectDelete(arg0) => Self::ObjectDelete(arg0.clone()),
+            Self::ObjectReplace(arg0, arg1) => Self::ObjectReplace(arg0.clone(), arg1.clone()),
+        }
+    }
 }
 
 impl Operator {
@@ -84,6 +150,7 @@ impl Operator {
         let size = match self {
             Operator::Noop() => 1,
             Operator::SubType(_, _) => 3,
+            Operator::SubType2(_, _, _) => 3,
             Operator::AddNumber(_) => 2,
             Operator::ListInsert(_) => 2,
             Operator::ListDelete(_) => 2,
@@ -148,6 +215,7 @@ impl Display for Operator {
         let s: String = match self {
             Operator::Noop() => "".into(),
             Operator::SubType(t, o) => format!("t: {}, o: {}", t, o),
+            Operator::SubType2(t, o, _) => format!("t: {}, o: {}", t, o),
             Operator::AddNumber(n) => format!("na: {}", n.to_string()),
             Operator::ListInsert(i) => format!("li: {}", i.to_string()),
             Operator::ListDelete(d) => format!("ld: {}", d.to_string()),
@@ -207,6 +275,7 @@ impl OperationComponent {
         let operator = match &self.operator {
             Operator::Noop() => Operator::Noop(),
             Operator::SubType(_, _) => todo!(),
+            Operator::SubType2(_, o, f) => f.invert(&path, o)?,
             Operator::AddNumber(n) => {
                 Operator::AddNumber(serde_json::to_value(-n.as_i64().unwrap()).unwrap())
             }
@@ -241,6 +310,7 @@ impl OperationComponent {
                 )),
                 _ => None,
             },
+            Operator::SubType2(_, _, f) => f.compose(&self.operator, &op.operator),
 
             Operator::ListInsert(v1) => match &op.operator {
                 Operator::ListDelete(v2) => {

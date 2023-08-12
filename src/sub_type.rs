@@ -1,22 +1,24 @@
 use std::fmt::Display;
+use std::rc::Rc;
 
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
 use serde_json::Value;
 
 use crate::error::{JsonError, Result};
-use crate::operation::OperationComponent;
+use crate::operation::{OperationComponent, Operator};
+use crate::path::Path;
 use crate::transformer::TransformSide;
 
 const NUMBER_ADD_SUB_TYPE_NAME: &str = "na";
 const TEXT_SUB_TYPE_NAME: &str = "text";
 
 pub trait SubTypeFunctions {
-    fn compose(
-        &self,
-        base: &mut OperationComponent,
-        other: OperationComponent,
-    ) -> Option<OperationComponent>;
+    fn box_clone(&self) -> Box<dyn SubTypeFunctions>;
+
+    fn invert(&self, path: &Path, sub_type_operator: &Value) -> Result<Operator>;
+
+    fn compose(&self, base: &Operator, other: &Operator) -> Option<Operator>;
 
     fn transform(
         &self,
@@ -25,9 +27,13 @@ pub trait SubTypeFunctions {
         side: TransformSide,
     ) -> Result<Vec<OperationComponent>>;
 
-    fn invert(&self, op: OperationComponent) -> Result<OperationComponent>;
-
     fn apply(&self, val: &mut Value, op: OperationComponent) -> Result<()>;
+}
+
+impl Clone for Box<dyn SubTypeFunctions> {
+    fn clone(&self) -> Self {
+        self.box_clone()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -71,6 +77,14 @@ impl Display for SubType {
         f.write_str(&s)?;
         Ok(())
     }
+}
+
+struct Wrapper<T: SubTypeFunctions> {
+    f: T,
+}
+
+pub struct SubTypeFunctionsHolder2<T: SubTypeFunctions> {
+    subtype_operators: DashMap<SubType, Wrapper<T>>,
 }
 
 pub struct SubTypeFunctionsHolder {

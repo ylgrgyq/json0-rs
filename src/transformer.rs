@@ -11,6 +11,7 @@ fn is_equivalent_to_noop(op: &OperationComponent) -> bool {
     match &op.operator {
         Operator::Noop() => true,
         Operator::SubType(_, _) => false,
+        Operator::SubType2(_, _, _) => false,
         Operator::AddNumber(_)
         | Operator::ListInsert(_)
         | Operator::ListDelete(_)
