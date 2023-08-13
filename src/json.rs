@@ -144,9 +144,16 @@ impl Appliable for Value {
                     "Only AddNumber operation can apply to a Number JSON Value".into(),
                 )),
             },
-            _ => Err(JsonError::InvalidOperation(
-                "Operation can only apply on array or object".into(),
-            )),
+            _ => match op {
+                Operator::SubType2(_, op, f) => {
+                    let v = f.apply(Some(self), &op)?;
+                    _ = mem::replace(self, v);
+                    Ok(())
+                }
+                _ => Err(JsonError::InvalidOperation(
+                    "Operation can only apply on array or object".into(),
+                )),
+            },
         }
     }
 }
@@ -161,15 +168,12 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
         assert!(paths.len() == 1);
 
         let k = paths.first_key_path().ok_or(JsonError::BadPath)?;
-        let target_value = self.get_mut(k);
+        let target_value = self.get(k);
         match &op {
-            Operator::AddNumber(v) => {
-                if let Some(old_v) = target_value {
-                    old_v.apply(paths, op, sub_type_functions)
-                } else {
-                    self.insert(k.clone(), v.clone());
-                    Ok(())
-                }
+            Operator::SubType2(_, op, f) => {
+                let v = f.apply(target_value, op)?;
+                self.insert(k.clone(), v);
+                Ok(())
             }
             Operator::ObjectInsert(v) => {
                 self.insert(k.clone(), v.clone());
@@ -210,7 +214,7 @@ impl Appliable for Vec<serde_json::Value> {
         assert!(paths.len() == 1);
 
         let index = paths.first_index_path().ok_or(JsonError::BadPath)?;
-        let target_value = self.get_mut(*index);
+        let target_value = self.get(*index);
         match op {
             Operator::AddNumber(v) => {
                 if let Some(old_v) = target_value {
@@ -227,6 +231,11 @@ impl Appliable for Vec<serde_json::Value> {
                     self[*index] = v.clone();
                     Ok(())
                 }
+            }
+            Operator::SubType2(_, op, f) => {
+                let v = f.apply(target_value, &op)?;
+                self[*index] = v;
+                Ok(())
             }
             Operator::ListInsert(v) => {
                 if *index > self.len() {

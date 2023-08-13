@@ -26,7 +26,7 @@ pub trait SubTypeFunctions {
         side: TransformSide,
     ) -> Result<Vec<OperationComponent>>;
 
-    fn apply(&self, val: &mut Value, op: OperationComponent) -> Result<()>;
+    fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Value>;
 }
 
 impl Clone for Box<dyn SubTypeFunctions> {
