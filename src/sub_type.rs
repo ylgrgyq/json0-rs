@@ -82,9 +82,10 @@ pub struct SubTypeFunctionsHolder {
 
 impl SubTypeFunctionsHolder {
     pub fn new() -> SubTypeFunctionsHolder {
-        SubTypeFunctionsHolder {
-            subtype_operators: DashMap::new(),
-        }
+        let subtype_operators: DashMap<SubType, Box<dyn SubTypeFunctions>> = DashMap::new();
+        subtype_operators.insert(SubType::NumberAdd, Box::new(NumberAddSubType {}));
+        subtype_operators.insert(SubType::Text, Box::new(TextSubType {}));
+        SubTypeFunctionsHolder { subtype_operators }
     }
 
     pub fn register_subtype(
@@ -121,5 +122,74 @@ impl SubTypeFunctionsHolder {
 impl Default for SubTypeFunctionsHolder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+struct NumberAddSubType {}
+
+impl SubTypeFunctions for NumberAddSubType {
+    fn box_clone(&self) -> Box<dyn SubTypeFunctions> {
+        Box::new(NumberAddSubType {})
+    }
+
+    fn invert(&self, path: &Path, sub_type_operator: &Value) -> Result<Operator> {
+        todo!()
+    }
+
+    fn compose(&self, base: &Operator, other: &Operator) -> Option<Operator> {
+        todo!()
+    }
+
+    fn transform(
+        &self,
+        new: OperationComponent,
+        base: OperationComponent,
+        side: TransformSide,
+    ) -> Result<Vec<OperationComponent>> {
+        todo!()
+    }
+
+    fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Value> {
+        if let Some(old_v) = val {
+            match old_v {
+                Value::Number(n) => {
+                    let new_v = n.as_u64().unwrap() + old_v.as_u64().unwrap();
+                    let serde_v = serde_json::to_value(new_v)?;
+                    Ok(serde_v)
+                }
+                _ => Err(JsonError::BadPath),
+            }
+        } else {
+            Ok(sub_type_operand.clone())
+        }
+    }
+}
+
+struct TextSubType {}
+
+impl SubTypeFunctions for TextSubType {
+    fn box_clone(&self) -> Box<dyn SubTypeFunctions> {
+        Box::new(TextSubType {})
+    }
+
+    fn invert(&self, path: &Path, sub_type_operator: &Value) -> Result<Operator> {
+        todo!()
+    }
+
+    fn compose(&self, base: &Operator, other: &Operator) -> Option<Operator> {
+        todo!()
+    }
+
+    fn transform(
+        &self,
+        new: OperationComponent,
+        base: OperationComponent,
+        side: TransformSide,
+    ) -> Result<Vec<OperationComponent>> {
+        todo!()
+    }
+
+    fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Value> {
+        todo!()
     }
 }

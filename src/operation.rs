@@ -732,7 +732,7 @@ impl SubTypeOperationBuilder {
         }
     }
 
-    pub fn sub_type_operator(mut self, val: Value) -> Self {
+    pub fn sub_type_operand(mut self, val: Value) -> Self {
         self.sub_type_operator = Some(val);
         self
     }
@@ -796,27 +796,49 @@ mod tests {
 
     #[test]
     fn test_number_add_operator() {
-        let op: OperationComponent = r#"{"p":["p1","p2"], "t":"na", "o":100}"#.try_into().unwrap();
+        let path: Path = r#"["p1","p2"]"#.try_into().unwrap();
+        let op_factory = OperationFactory::new(Rc::new(SubTypeFunctionsHolder::new()));
+        let op = op_factory
+            .sub_type_operation_builder(path, SubType::NumberAdd)
+            .sub_type_operand(serde_json::to_value(100).unwrap())
+            .build()
+            .unwrap();
 
-        assert_eq!(
-            Operator::SubType(SubType::NumberAdd, serde_json::to_value(100).unwrap()),
-            op.operator
-        );
+        let Operator::SubType2(sub_type, op_value, _) = op.operator else {
+            panic!()
+        };
+        assert_eq!(SubType::NumberAdd, sub_type);
+        assert_eq!(serde_json::to_value(100).unwrap(), op_value);
     }
 
     #[test]
     fn test_text_operator() {
-        let op: OperationComponent =
-            r#"{"p":["p1","p2"], "t":"text", "o":{"p":["p3"],"si":"hello"}}"#
-                .try_into()
-                .unwrap();
+        let sub_type_operand: Value = serde_json::from_str(r#"{"p":["p3"],"si":"hello"}"#).unwrap();
+        let path: Path = r#"["p1","p2"]"#.try_into().unwrap();
+        let op_factory = OperationFactory::new(Rc::new(SubTypeFunctionsHolder::new()));
+        let op = op_factory
+            .sub_type_operation_builder(path, SubType::Text)
+            .sub_type_operand(sub_type_operand.clone())
+            .build()
+            .unwrap();
 
-        assert_eq!(
-            Operator::SubType(
-                SubType::Text,
-                serde_json::from_str(r#"{"p":["p3"],"si":"hello"}"#).unwrap()
-            ),
-            op.operator
-        );
+        let Operator::SubType2(sub_type, op_value, _) = op.operator else {
+                panic!()
+            };
+        assert_eq!(SubType::Text, sub_type);
+        assert_eq!(sub_type_operand, op_value);
+
+        // let op: OperationComponent =
+        //     r#"{"p":["p1","p2"], "t":"text", "o":{"p":["p3"],"si":"hello"}}"#
+        //         .try_into()
+        //         .unwrap();
+
+        // assert_eq!(
+        //     Operator::SubType(
+        //         SubType::Text,
+        //         serde_json::from_str(r#"{"p":["p3"],"si":"hello"}"#).unwrap()
+        //     ),
+        //     op.operator
+        // );
     }
 }
