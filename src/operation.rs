@@ -299,6 +299,9 @@ impl OperationComponent {
         OperationComponent::new(path, operator)
     }
 
+    /**
+     *
+     */
     pub fn compose(&mut self, op: OperationComponent) -> Option<OperationComponent> {
         if let Some(new_operator) = match &self.operator {
             Operator::Noop() => Some(op.operator.clone()),
@@ -308,7 +311,7 @@ impl OperationComponent {
                 )),
                 _ => None,
             },
-            Operator::SubType2(_, _, f) => f.compose(&self.operator, &op.operator),
+            Operator::SubType2(_, base_v, f) => f.compose(base_v, &op.operator),
 
             Operator::ListInsert(v1) => match &op.operator {
                 Operator::ListDelete(v2) => {
@@ -792,6 +795,7 @@ impl OperationFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use log::info;
     use test_log::test;
 
     #[test]
@@ -827,18 +831,5 @@ mod tests {
             };
         assert_eq!(SubType::Text, sub_type);
         assert_eq!(sub_type_operand, op_value);
-
-        // let op: OperationComponent =
-        //     r#"{"p":["p1","p2"], "t":"text", "o":{"p":["p3"],"si":"hello"}}"#
-        //         .try_into()
-        //         .unwrap();
-
-        // assert_eq!(
-        //     Operator::SubType(
-        //         SubType::Text,
-        //         serde_json::from_str(r#"{"p":["p3"],"si":"hello"}"#).unwrap()
-        //     ),
-        //     op.operator
-        // );
     }
 }

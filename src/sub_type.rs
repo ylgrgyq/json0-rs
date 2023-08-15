@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{format, Display};
 
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
@@ -15,9 +15,9 @@ const TEXT_SUB_TYPE_NAME: &str = "text";
 pub trait SubTypeFunctions {
     fn box_clone(&self) -> Box<dyn SubTypeFunctions>;
 
-    fn invert(&self, path: &Path, sub_type_operator: &Value) -> Result<Operator>;
+    fn invert(&self, path: &Path, sub_type_operand: &Value) -> Result<Operator>;
 
-    fn compose(&self, base: &Operator, other: &Operator) -> Option<Operator>;
+    fn compose(&self, base_operand: &Value, other: &Operator) -> Option<Operator>;
 
     fn transform(
         &self,
@@ -132,12 +132,57 @@ impl SubTypeFunctions for NumberAddSubType {
         Box::new(NumberAddSubType {})
     }
 
-    fn invert(&self, path: &Path, sub_type_operator: &Value) -> Result<Operator> {
-        todo!()
+    fn invert(&self, _: &Path, sub_type_operand: &Value) -> Result<Operator> {
+        if let Value::Number(n) = sub_type_operand {
+            if n.is_i64() {
+                Ok(Operator::SubType2(
+                    SubType::NumberAdd,
+                    serde_json::to_value(-n.as_i64().unwrap()).unwrap(),
+                    self.box_clone(),
+                ))
+            } else if n.is_f64() {
+                Ok(Operator::SubType2(
+                    SubType::NumberAdd,
+                    serde_json::to_value(-n.as_f64().unwrap()).unwrap(),
+                    self.box_clone(),
+                ))
+            } else {
+                Err(JsonError::InvalidOperation(format!(
+                    "invalid number value:\"{}\" in NumberAdd sub type operand",
+                    sub_type_operand
+                )))
+            }
+        } else {
+            Err(JsonError::InvalidOperation(format!(
+                "invalid operand:\"{}\" for NumberAdd sub type",
+                sub_type_operand
+            )))
+        }
     }
 
-    fn compose(&self, base: &Operator, other: &Operator) -> Option<Operator> {
-        todo!()
+    fn compose(&self, base_operand: &Value, other: &Operator) -> Option<Operator> {
+        match &other {
+            Operator::AddNumber(other_v) => {
+                if base_operand.is_i64() && other_v.is_i64() {
+                    let new_v = base_operand.as_i64().unwrap() + other_v.as_i64().unwrap();
+                    Some(Operator::SubType2(
+                        SubType::NumberAdd,
+                        serde_json::to_value(new_v).unwrap(),
+                        self.box_clone(),
+                    ))
+                } else if base_operand.is_f64() && other_v.is_f64() {
+                    let new_v = base_operand.as_f64().unwrap() + other_v.as_f64().unwrap();
+                    Some(Operator::SubType2(
+                        SubType::NumberAdd,
+                        serde_json::to_value(new_v).unwrap(),
+                        self.box_clone(),
+                    ))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
     }
 
     fn transform(
@@ -176,7 +221,7 @@ impl SubTypeFunctions for TextSubType {
         todo!()
     }
 
-    fn compose(&self, base: &Operator, other: &Operator) -> Option<Operator> {
+    fn compose(&self, base: &Value, other: &Operator) -> Option<Operator> {
         todo!()
     }
 
