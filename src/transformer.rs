@@ -458,7 +458,7 @@ impl Transformer {
                 let (_, p2) = other.path.split_at(common_path.len());
                 // v maybe cannot apply other.operator
                 // if that happen we do not consume other just leave origin op
-                _ = v.apply(p2, other.operator.clone(), &self.sub_type_holder);
+                _ = v.apply(p2, other.operator.clone());
             }
             _ => {}
         }

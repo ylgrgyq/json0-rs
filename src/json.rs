@@ -4,7 +4,6 @@ use crate::{
     error::{JsonError, Result},
     operation::Operator,
     path::Path,
-    sub_type::SubTypeFunctionsHolder,
 };
 
 use serde_json::Value;
@@ -16,12 +15,7 @@ pub trait Routable {
 }
 
 pub trait Appliable {
-    fn apply(
-        &mut self,
-        paths: Path,
-        operator: Operator,
-        sub_type_functions: &SubTypeFunctionsHolder,
-    ) -> Result<()>;
+    fn apply(&mut self, paths: Path, operator: Operator) -> Result<()>;
 }
 
 impl Routable for Value {
@@ -116,23 +110,17 @@ impl Routable for Vec<serde_json::Value> {
 }
 
 impl Appliable for Value {
-    fn apply(
-        &mut self,
-        paths: Path,
-        op: Operator,
-        sub_type_functions: &SubTypeFunctionsHolder,
-    ) -> Result<()> {
+    fn apply(&mut self, paths: Path, op: Operator) -> Result<()> {
         if paths.len() > 1 {
             let (left, right) = paths.split_at(paths.len() - 1);
-            return self.route_get_mut(&left)?.ok_or(JsonError::BadPath)?.apply(
-                right,
-                op,
-                sub_type_functions,
-            );
+            return self
+                .route_get_mut(&left)?
+                .ok_or(JsonError::BadPath)?
+                .apply(right, op);
         }
         match self {
-            Value::Array(array) => array.apply(paths, op, sub_type_functions),
-            Value::Object(obj) => obj.apply(paths, op, sub_type_functions),
+            Value::Array(array) => array.apply(paths, op),
+            Value::Object(obj) => obj.apply(paths, op),
             Value::Number(n) => match op {
                 Operator::AddNumber(v) => {
                     let new_v = n.as_u64().unwrap() + v.as_u64().unwrap();
@@ -159,12 +147,7 @@ impl Appliable for Value {
 }
 
 impl Appliable for serde_json::Map<String, serde_json::Value> {
-    fn apply(
-        &mut self,
-        paths: Path,
-        op: Operator,
-        sub_type_functions: &SubTypeFunctionsHolder,
-    ) -> Result<()> {
+    fn apply(&mut self, paths: Path, op: Operator) -> Result<()> {
         assert!(paths.len() == 1);
 
         let k = paths.first_key_path().ok_or(JsonError::BadPath)?;
@@ -205,12 +188,7 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
 }
 
 impl Appliable for Vec<serde_json::Value> {
-    fn apply(
-        &mut self,
-        paths: Path,
-        op: Operator,
-        sub_type_functions: &SubTypeFunctionsHolder,
-    ) -> Result<()> {
+    fn apply(&mut self, paths: Path, op: Operator) -> Result<()> {
         assert!(paths.len() == 1);
 
         let index = paths.first_index_path().ok_or(JsonError::BadPath)?;
