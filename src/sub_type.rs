@@ -1,4 +1,4 @@
-use std::fmt::{format, Display};
+use std::fmt::Display;
 
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
@@ -195,17 +195,30 @@ impl SubTypeFunctions for NumberAddSubType {
     }
 
     fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Value> {
-        if let Some(old_v) = val {
-            match old_v {
-                Value::Number(n) => {
-                    let new_v = n.as_u64().unwrap() + old_v.as_u64().unwrap();
-                    let serde_v = serde_json::to_value(new_v)?;
-                    Ok(serde_v)
+        if let Value::Number(new_n) = sub_type_operand {
+            if let Some(old_v) = val {
+                match old_v {
+                    Value::Number(old_n) => {
+                        if old_n.is_i64() && new_n.is_i64() {
+                            return Ok(serde_json::to_value(
+                                old_n.as_i64().unwrap() + new_n.as_i64().unwrap(),
+                            )?);
+                        }
+
+                        return Ok(serde_json::to_value(
+                            old_n.as_f64().unwrap() + new_n.as_f64().unwrap(),
+                        )?);
+                    }
+                    _ => Err(JsonError::BadPath),
                 }
-                _ => Err(JsonError::BadPath),
+            } else {
+                Ok(sub_type_operand.clone())
             }
         } else {
-            Ok(sub_type_operand.clone())
+            Err(JsonError::InvalidOperation(format!(
+                "operand: \"{}\" for NumberAdd sub type is not a number",
+                sub_type_operand
+            )))
         }
     }
 }

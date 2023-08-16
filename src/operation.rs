@@ -103,69 +103,6 @@ impl Clone for Operator {
 }
 
 impl Operator {
-    fn map_to_operator(obj: &Map<String, Value>) -> Result<Operator> {
-        if let Some(t) = obj.get("t") {
-            let sub_type = t.try_into()?;
-            let op = obj.get("o").cloned().unwrap_or(Value::Null);
-            return Ok(Operator::SubType(sub_type, op));
-        }
-
-        if let Some(na) = obj.get("na") {
-            return Ok(Operator::AddNumber(na.clone()));
-        }
-
-        if let Some(lm) = obj.get("lm") {
-            let i = Operator::value_to_index(lm)?;
-            return Ok(Operator::ListMove(i));
-        }
-
-        if let Some(li) = obj.get("li") {
-            if let Some(ld) = obj.get("ld") {
-                return Ok(Operator::ListReplace(li.clone(), ld.clone()));
-            }
-            return Ok(Operator::ListInsert(li.clone()));
-        }
-
-        if let Some(ld) = obj.get("ld") {
-            return Ok(Operator::ListDelete(ld.clone()));
-        }
-
-        if let Some(oi) = obj.get("oi") {
-            if let Some(od) = obj.get("od") {
-                return Ok(Operator::ObjectReplace(oi.clone(), od.clone()));
-            }
-            return Ok(Operator::ObjectInsert(oi.clone()));
-        }
-
-        if let Some(od) = obj.get("od") {
-            return Ok(Operator::ObjectDelete(od.clone()));
-        }
-
-        Ok(Operator::Noop())
-    }
-
-    fn validate_json_object_size(&self, obj: &Map<String, Value>) -> Result<()> {
-        let size = match self {
-            Operator::Noop() => 1,
-            Operator::SubType(_, _) => 3,
-            Operator::SubType2(_, _, _) => 3,
-            Operator::AddNumber(_) => 2,
-            Operator::ListInsert(_) => 2,
-            Operator::ListDelete(_) => 2,
-            Operator::ListReplace(_, _) => 3,
-            Operator::ListMove(_) => 2,
-            Operator::ObjectInsert(_) => 2,
-            Operator::ObjectDelete(_) => 2,
-            Operator::ObjectReplace(_, _) => 3,
-        };
-        if obj.len() != size {
-            return Err(JsonError::InvalidOperation(
-                "JSON object size bigger than operator required".into(),
-            ));
-        }
-        Ok(())
-    }
-
     fn value_to_index(val: &Value) -> Result<usize> {
         if let Some(i) = val.as_u64() {
             return Ok(i as usize);
@@ -187,23 +124,6 @@ impl Validation for Operator {
                 )),
             },
             _ => Ok(()),
-        }
-    }
-}
-
-impl TryFrom<Value> for Operator {
-    type Error = JsonError;
-
-    fn try_from(input: Value) -> std::result::Result<Self, Self::Error> {
-        match &input {
-            Value::Object(obj) => {
-                let operator = Operator::map_to_operator(obj)?;
-                operator.validate_json_object_size(obj)?;
-                Ok(operator)
-            }
-            _ => Err(JsonError::InvalidOperation(
-                "Operator can only be parsed from JSON Object".into(),
-            )),
         }
     }
 }
@@ -438,35 +358,6 @@ impl Validation for Vec<OperationComponent> {
     }
 }
 
-impl TryFrom<&str> for OperationComponent {
-    type Error = JsonError;
-
-    fn try_from(input: &str) -> std::result::Result<Self, Self::Error> {
-        let json_value: Value = serde_json::from_str(input)?;
-        json_value.try_into()
-    }
-}
-
-impl TryFrom<Value> for OperationComponent {
-    type Error = error::JsonError;
-
-    fn try_from(input: Value) -> std::result::Result<Self, Self::Error> {
-        let path_value = input.get("p");
-
-        if path_value.is_none() {
-            return Err(JsonError::InvalidOperation("Missing path".into()));
-        }
-
-        let paths = Path::try_from(path_value.unwrap())?;
-        let operator = input.try_into()?;
-
-        Ok(OperationComponent {
-            path: paths,
-            operator,
-        })
-    }
-}
-
 impl Display for OperationComponent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!(r#"{{"p": {}, {}}}"#, self.path, self.operator))?;
@@ -573,26 +464,6 @@ impl From<OperationComponent> for Operation {
 impl From<Vec<OperationComponent>> for Operation {
     fn from(operations: Vec<OperationComponent>) -> Self {
         Operation { operations }
-    }
-}
-
-impl TryFrom<Value> for Operation {
-    type Error = JsonError;
-
-    fn try_from(value: Value) -> std::result::Result<Self, Self::Error> {
-        let mut operations = vec![];
-        match value {
-            Value::Array(arr) => {
-                for v in arr {
-                    let op: OperationComponent = v.try_into()?;
-                    operations.push(op);
-                }
-            }
-            _ => {
-                operations.push(value.try_into()?);
-            }
-        }
-        Operation::new(operations)
     }
 }
 
@@ -771,6 +642,22 @@ impl OperationFactory {
         OperationFactory { sub_type_holder }
     }
 
+    pub fn from_value(&self, value: Value) -> Result<Operation> {
+        let mut operations = vec![];
+        match value {
+            Value::Array(arr) => {
+                for v in arr {
+                    let op: OperationComponent = self.operation_component_from_value(v)?;
+                    operations.push(op);
+                }
+            }
+            _ => {
+                operations.push(self.operation_component_from_value(value)?);
+            }
+        }
+        Operation::new(operations)
+    }
+
     pub fn list_operation_builder(&self, path: Path) -> ListOperationBuilder {
         ListOperationBuilder::new(path)
     }
@@ -789,6 +676,113 @@ impl OperationFactory {
             .get(&sub_type)
             .map(|f| f.value().clone());
         SubTypeOperationBuilder::new(path, sub_type, f)
+    }
+
+    fn operation_component_from_value(&self, value: Value) -> Result<OperationComponent> {
+        let path_value = value.get("p");
+
+        if path_value.is_none() {
+            return Err(JsonError::InvalidOperation("Missing path".into()));
+        }
+
+        let paths = Path::try_from(path_value.unwrap())?;
+        let operator = self.operator_from_value(value)?;
+
+        Ok(OperationComponent {
+            path: paths,
+            operator,
+        })
+    }
+
+    fn operator_from_value(&self, value: Value) -> Result<Operator> {
+        match &value {
+            Value::Object(obj) => {
+                let operator = self.map_to_operator(obj)?;
+                Ok(operator)
+            }
+            _ => Err(JsonError::InvalidOperation(
+                "Operator can only be parsed from JSON Object".into(),
+            )),
+        }
+    }
+
+    fn map_to_operator(&self, obj: &Map<String, Value>) -> Result<Operator> {
+        if let Some(na) = obj.get("na") {
+            self.validate_operation_object_size(obj, 2)?;
+            return Ok(Operator::SubType2(
+                SubType::NumberAdd,
+                na.clone(),
+                self.sub_type_holder
+                    .get(&SubType::NumberAdd)
+                    .map(|f| f.value().clone())
+                    .unwrap(),
+            ));
+        }
+
+        if let Some(t) = obj.get("t") {
+            self.validate_operation_object_size(obj, 3)?;
+            let sub_type = t.try_into()?;
+            let op = obj.get("o").cloned().unwrap_or(Value::Null);
+            let sub_op_func = self
+                .sub_type_holder
+                .get(&sub_type)
+                .map(|f| f.value().clone())
+                .ok_or(JsonError::InvalidOperation(format!(
+                    "no sub type functions for sub type: {}",
+                    sub_type
+                )))?;
+            return Ok(Operator::SubType2(sub_type, op, sub_op_func));
+        }
+
+        if let Some(lm) = obj.get("lm") {
+            self.validate_operation_object_size(obj, 2)?;
+            let i = Operator::value_to_index(lm)?;
+            return Ok(Operator::ListMove(i));
+        }
+
+        if let Some(li) = obj.get("li") {
+            if let Some(ld) = obj.get("ld") {
+                self.validate_operation_object_size(obj, 3)?;
+                return Ok(Operator::ListReplace(li.clone(), ld.clone()));
+            }
+            self.validate_operation_object_size(obj, 2)?;
+            return Ok(Operator::ListInsert(li.clone()));
+        }
+
+        if let Some(ld) = obj.get("ld") {
+            self.validate_operation_object_size(obj, 2)?;
+            return Ok(Operator::ListDelete(ld.clone()));
+        }
+
+        if let Some(oi) = obj.get("oi") {
+            if let Some(od) = obj.get("od") {
+                self.validate_operation_object_size(obj, 3)?;
+                return Ok(Operator::ObjectReplace(oi.clone(), od.clone()));
+            }
+            self.validate_operation_object_size(obj, 2)?;
+            return Ok(Operator::ObjectInsert(oi.clone()));
+        }
+
+        if let Some(od) = obj.get("od") {
+            self.validate_operation_object_size(obj, 2)?;
+            return Ok(Operator::ObjectDelete(od.clone()));
+        }
+
+        self.validate_operation_object_size(obj, 1)?;
+        Ok(Operator::Noop())
+    }
+
+    fn validate_operation_object_size(
+        &self,
+        origin_operation: &Map<String, Value>,
+        expect_size: usize,
+    ) -> Result<()> {
+        if origin_operation.len() != expect_size {
+            return Err(JsonError::InvalidOperation(
+                "JSON object size bigger than operator required".into(),
+            ));
+        }
+        Ok(())
     }
 }
 
