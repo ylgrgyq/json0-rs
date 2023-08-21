@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use log::{debug, info};
 use my_json0::error::{JsonError, Result};
-use my_json0::operation::{Operation, OperationComponent};
+use my_json0::operation::Operation;
 use my_json0::Json0;
 use serde_json::Value;
 use std::fmt::Display;
@@ -304,6 +304,93 @@ impl<'a> TestPattern<InvertOperationTest, InvertOperationExecutor>
     }
 }
 
+#[derive(Debug)]
+struct MergeOperationTest {
+    base_op: Operation,
+    other_op: Operation,
+    expect_op: Operation,
+}
+
+struct MergeOperationExecutor {
+    json0: Json0,
+}
+
+impl Test<MergeOperationExecutor> for MergeOperationTest {
+    fn test(&self, _: &MergeOperationExecutor) {
+        let mut base = self.base_op.clone();
+        base.compose(self.other_op.clone()).unwrap();
+
+        assert_eq!(self.expect_op, base);
+    }
+}
+
+impl Display for MergeOperationTest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!(
+            "base_op:   {}\nother_op:  {}\nexpect_op: {}",
+            self.base_op, self.other_op, self.expect_op
+        ))
+    }
+}
+
+struct MergeOperationTestPattern<'a> {
+    test_input_file_path: &'a str,
+    executor: MergeOperationExecutor,
+}
+
+impl<'a> MergeOperationTestPattern<'a> {
+    fn new(p: &'a str) -> MergeOperationTestPattern<'a> {
+        MergeOperationTestPattern {
+            test_input_file_path: p,
+            executor: MergeOperationExecutor {
+                json0: Json0::new(),
+            },
+        }
+    }
+}
+
+impl<'a> TestPattern<MergeOperationTest, MergeOperationExecutor> for MergeOperationTestPattern<'a> {
+    fn load<I: Iterator<Item = (usize, Value)>>(
+        &self,
+        input: &mut I,
+    ) -> Result<Option<MergeOperationTest>> {
+        if let Some((line, base_op)) = input.next() {
+            let ((_, other_op), (_, expect_result)) = input.next_tuple().ok_or(
+                JsonError::UnexpectedError("not enough input values for test".into()),
+            )?;
+
+            let test = MergeOperationTest {
+                base_op: self
+                    .executor()
+                    .json0
+                    .operation_factory()
+                    .from_value(base_op)?,
+                other_op: self
+                    .executor()
+                    .json0
+                    .operation_factory()
+                    .from_value(other_op)?,
+                expect_op: self
+                    .executor()
+                    .json0
+                    .operation_factory()
+                    .from_value(expect_result)?,
+            };
+            debug!("load test at line: {}\n{}", line, &test);
+            return Ok(Some(test));
+        }
+        Ok(None)
+    }
+
+    fn executor(&self) -> &MergeOperationExecutor {
+        &self.executor
+    }
+
+    fn test_input_path(&self) -> &str {
+        self.test_input_file_path
+    }
+}
+
 fn run_test<T: Test<E>, E, P: Sized + TestPattern<T, E>>(pattern: &P) -> Result<()> {
     let mut input_data_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     input_data_path.push(pattern.test_input_path());
@@ -332,7 +419,7 @@ fn test_invert() {
 
 #[test]
 fn test_json_compose() {
-    let pattern = ApplyOperationTestPattern::new("tests/resources/compose_op_case.json");
+    let pattern = MergeOperationTestPattern::new("tests/resources/compose_op_case.json");
     run_test(&pattern).unwrap();
 }
 

@@ -6,12 +6,13 @@ use std::{
     vec,
 };
 
+use itertools::Itertools;
 use serde_json::{Map, Value};
 
 use crate::{
     common::Validation,
     error::JsonError,
-    error::{self, Result},
+    error::Result,
     path::{Path, PathElement},
     sub_type::{SubType, SubTypeFunctions, SubTypeFunctionsHolder},
 };
@@ -222,7 +223,7 @@ impl OperationComponent {
     /**
      *
      */
-    pub fn compose(&mut self, op: OperationComponent) -> Option<OperationComponent> {
+    pub fn merge(&mut self, op: OperationComponent) -> Option<OperationComponent> {
         if let Some(new_operator) = match &self.operator {
             Operator::Noop() => Some(op.operator.clone()),
             Operator::AddNumber(v1) => match &op.operator {
@@ -231,7 +232,7 @@ impl OperationComponent {
                 )),
                 _ => None,
             },
-            Operator::SubType2(_, base_v, f) => f.compose(base_v, &op.operator),
+            Operator::SubType2(_, base_v, f) => f.merge(base_v, &op.operator),
 
             Operator::ListInsert(v1) => match &op.operator {
                 Operator::ListDelete(v2) => {
@@ -399,7 +400,7 @@ impl Operation {
 
         let last = self.last_mut().unwrap();
         if last.path.eq(&op.path) {
-            if let Some(o) = last.compose(op) {
+            if let Some(o) = last.merge(op) {
                 self.push(o);
             } else {
                 if last.operator.eq(&Operator::Noop()) {
@@ -414,12 +415,12 @@ impl Operation {
         Ok(())
     }
 
-    pub fn compose(mut self, other: Operation) -> Result<Operation> {
+    pub fn compose(&mut self, other: Operation) -> Result<()> {
         for op in other.into_iter() {
             self.append(op)?;
         }
 
-        Ok(self)
+        Ok(())
     }
 }
 
@@ -469,10 +470,15 @@ impl From<Vec<OperationComponent>> for Operation {
 
 impl Display for Operation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for op in self.operations.iter() {
-            f.write_str(&op.to_string())?;
-        }
-
+        f.write_str("[")?;
+        f.write_str(
+            self.operations
+                .iter()
+                .map(|op| op.to_string())
+                .join(",")
+                .as_str(),
+        )?;
+        f.write_str("]")?;
         Ok(())
     }
 }

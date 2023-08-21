@@ -17,7 +17,7 @@ pub trait SubTypeFunctions {
 
     fn invert(&self, path: &Path, sub_type_operand: &Value) -> Result<Operator>;
 
-    fn compose(&self, base_operand: &Value, other: &Operator) -> Option<Operator>;
+    fn merge(&self, base_operand: &Value, other: &Operator) -> Option<Operator>;
 
     fn transform(
         &self,
@@ -160,9 +160,9 @@ impl SubTypeFunctions for NumberAddSubType {
         }
     }
 
-    fn compose(&self, base_operand: &Value, other: &Operator) -> Option<Operator> {
+    fn merge(&self, base_operand: &Value, other: &Operator) -> Option<Operator> {
         match &other {
-            Operator::AddNumber(other_v) => {
+            Operator::SubType2(_, other_v, _) => {
                 if base_operand.is_i64() && other_v.is_i64() {
                     let new_v = base_operand.as_i64().unwrap() + other_v.as_i64().unwrap();
                     Some(Operator::SubType2(
@@ -170,7 +170,7 @@ impl SubTypeFunctions for NumberAddSubType {
                         serde_json::to_value(new_v).unwrap(),
                         self.box_clone(),
                     ))
-                } else if base_operand.is_f64() && other_v.is_f64() {
+                } else if base_operand.is_f64() || other_v.is_f64() {
                     let new_v = base_operand.as_f64().unwrap() + other_v.as_f64().unwrap();
                     Some(Operator::SubType2(
                         SubType::NumberAdd,
@@ -205,9 +205,9 @@ impl SubTypeFunctions for NumberAddSubType {
                             )?);
                         }
 
-                        return Ok(serde_json::to_value(
+                        Ok(serde_json::to_value(
                             old_n.as_f64().unwrap() + new_n.as_f64().unwrap(),
-                        )?);
+                        )?)
                     }
                     _ => Err(JsonError::BadPath),
                 }
@@ -234,7 +234,7 @@ impl SubTypeFunctions for TextSubType {
         todo!()
     }
 
-    fn compose(&self, base: &Value, other: &Operator) -> Option<Operator> {
+    fn merge(&self, base: &Value, other: &Operator) -> Option<Operator> {
         todo!()
     }
 
