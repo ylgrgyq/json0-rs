@@ -316,12 +316,13 @@ impl OperationComponent {
     }
 
     pub fn operate_path(&self) -> Path {
-        if let Operator::AddNumber(_) = self.operator {
-            self.path.clone()
-        } else {
-            let mut p = self.path.clone();
-            p.get_mut_elements().pop();
-            p
+        match self.operator {
+            Operator::SubType2(_, _, _) | Operator::AddNumber(_) => self.path.clone(),
+            _ => {
+                let mut p = self.path.clone();
+                p.get_mut_elements().pop();
+                p
+            }
         }
     }
 
