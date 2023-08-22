@@ -1,11 +1,12 @@
 use std::fmt::Display;
+use std::vec;
 
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
 use serde_json::Value;
 
 use crate::error::{JsonError, Result};
-use crate::operation::{OperationComponent, Operator};
+use crate::operation::Operator;
 use crate::path::Path;
 use crate::transformer::TransformSide;
 
@@ -19,12 +20,7 @@ pub trait SubTypeFunctions {
 
     fn merge(&self, base_operand: &Value, other: &Operator) -> Option<Operator>;
 
-    fn transform(
-        &self,
-        new: OperationComponent,
-        base: OperationComponent,
-        side: TransformSide,
-    ) -> Result<Vec<OperationComponent>>;
+    fn transform(&self, new: &Value, base: &Value, side: TransformSide) -> Result<Vec<Value>>;
 
     fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Value>;
 }
@@ -185,13 +181,8 @@ impl SubTypeFunctions for NumberAddSubType {
         }
     }
 
-    fn transform(
-        &self,
-        new: OperationComponent,
-        base: OperationComponent,
-        side: TransformSide,
-    ) -> Result<Vec<OperationComponent>> {
-        todo!()
+    fn transform(&self, new: &Value, _: &Value, _: TransformSide) -> Result<Vec<Value>> {
+        Ok(vec![new.clone()])
     }
 
     fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Value> {
@@ -238,12 +229,7 @@ impl SubTypeFunctions for TextSubType {
         todo!()
     }
 
-    fn transform(
-        &self,
-        new: OperationComponent,
-        base: OperationComponent,
-        side: TransformSide,
-    ) -> Result<Vec<OperationComponent>> {
+    fn transform(&self, new: &Value, base: &Value, side: TransformSide) -> Result<Vec<Value>> {
         todo!()
     }
 

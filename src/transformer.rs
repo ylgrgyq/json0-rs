@@ -174,6 +174,26 @@ impl Transformer {
         let same_operand = base_op.path.len() == new_op.path.len();
         let base_op_is_prefix = base_op.path.is_prefix_of(&new_op.path);
         match &base_op.operator {
+            Operator::SubType2(base_sub_type, base_op_operand, base_f) => {
+                if let Operator::SubType2(new_op_subtype, new_op_operand, _) = &new_op.operator {
+                    if base_sub_type.eq(new_op_subtype) {
+                        return base_f
+                            .transform(new_op_operand, base_op_operand, side)?
+                            .into_iter()
+                            .map(|o| {
+                                OperationComponent::new(
+                                    base_op.path.clone(),
+                                    Operator::SubType2(
+                                        base_sub_type.clone(),
+                                        o,
+                                        base_f.box_clone(),
+                                    ),
+                                )
+                            })
+                            .collect::<Result<Vec<OperationComponent>>>();
+                    }
+                }
+            }
             Operator::ListReplace(li_v, _) => {
                 if base_op_is_prefix {
                     if !same_operand {
