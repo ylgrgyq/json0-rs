@@ -1,9 +1,11 @@
+use std::collections::HashMap;
 use std::fmt::Display;
+use std::hash::Hash;
 use std::vec;
 
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::error::{JsonError, Result};
 use crate::operation::Operator;
@@ -216,13 +218,62 @@ impl SubTypeFunctions for NumberAddSubType {
 
 struct TextSubType {}
 
+impl TextSubType {
+    fn invert_object(&self, op: &serde_json::Map<String, Value>) -> Result<Map<String, Value>> {
+        let mut new_op: Map<String, Value> = serde_json::Map::new();
+        if let Some(p) = op.get("p") {
+            new_op.insert("p".into(), p.clone());
+        }
+
+        if let Some(i) = op.get("i") {
+            new_op.insert("d".into(), i.clone());
+        } else if let Some(d) = op.get("d") {
+            new_op.insert("i".into(), d.clone());
+        } else {
+            return Err(JsonError::InvalidOperation(format!(
+                "invalid sub type operand:\"{}\" for TextSubType",
+                Value::Object(op.clone())
+            ))
+            .into());
+        }
+        Ok(new_op)
+    }
+}
 impl SubTypeFunctions for TextSubType {
     fn box_clone(&self) -> Box<dyn SubTypeFunctions> {
         Box::new(TextSubType {})
     }
 
-    fn invert(&self, path: &Path, sub_type_operator: &Value) -> Result<Operator> {
-        todo!()
+    fn invert(&self, _: &Path, sub_type_operand: &Value) -> Result<Operator> {
+        match sub_type_operand {
+            Value::Array(ops) => {
+                let new_ops = ops
+                    .iter()
+                    .map(|op| {
+                        if let Value::Object(o) = op {
+                            Ok(Value::Object(self.invert_object(o)?))
+                        } else {
+                            Err(JsonError::BadPath)
+                        }
+                    })
+                    .collect::<Result<Vec<Value>>>()?;
+                Ok(Operator::SubType2(
+                    SubType::Text,
+                    Value::Array(new_ops),
+                    self.box_clone(),
+                ))
+            }
+            Value::Object(op) => Ok(Operator::SubType2(
+                SubType::Text,
+                Value::Object(self.invert_object(op)?),
+                self.box_clone(),
+            )),
+            _ => Err(JsonError::InvalidOperation(format!(
+                "invalid sub type operand:\"{}\" for TextSubType",
+                sub_type_operand
+            ))
+            .into()),
+        }
     }
 
     fn merge(&self, base: &Value, other: &Operator) -> Option<Operator> {
