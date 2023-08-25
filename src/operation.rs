@@ -592,19 +592,68 @@ impl ObjectOperationBuilder {
     }
 }
 
+pub struct NumberAddOperationBuilder {
+    path: Path,
+    number_i64: Option<i64>,
+    number_f64: Option<f64>,
+    sub_type_function: Box<dyn SubTypeFunctions>,
+}
+
+impl NumberAddOperationBuilder {
+    fn new(path: Path, sub_type_function: Box<dyn SubTypeFunctions>) -> NumberAddOperationBuilder {
+        NumberAddOperationBuilder {
+            path,
+            number_i64: None,
+            number_f64: None,
+            sub_type_function,
+        }
+    }
+
+    fn add_int(mut self, num: i64) -> Self {
+        self.number_i64 = Some(num);
+        self
+    }
+
+    fn add_float(mut self, num: f64) -> Self {
+        self.number_f64 = Some(num);
+        self
+    }
+
+    fn build(self) -> Result<OperationComponent> {
+        if self.number_f64.is_some() && self.number_i64.is_some() {
+            return Err(JsonError::InvalidOperation(
+                "only one number can be add".into(),
+            ));
+        }
+
+        if let Some(v) = self.number_i64 {
+            let o = serde_json::to_value(v).unwrap();
+            OperationComponent::new(
+                self.path,
+                Operator::SubType2(SubType::NumberAdd, o, self.sub_type_function),
+            )
+        } else if let Some(v) = self.number_f64 {
+            let o = serde_json::to_value(v).unwrap();
+            OperationComponent::new(
+                self.path,
+                Operator::SubType2(SubType::NumberAdd, o, self.sub_type_function),
+            )
+        } else {
+            return Err(JsonError::InvalidOperation("need a number to add".into()));
+        }
+    }
+}
+
 pub struct TextOperationBuilder {
     path: Path,
     offset: usize,
     insert_val: Option<String>,
     delete_val: Option<String>,
-    sub_type_function: Option<Box<dyn SubTypeFunctions>>,
+    sub_type_function: Box<dyn SubTypeFunctions>,
 }
 
 impl TextOperationBuilder {
-    fn new(
-        path: Path,
-        sub_type_function: Option<Box<dyn SubTypeFunctions>>,
-    ) -> TextOperationBuilder {
+    fn new(path: Path, sub_type_function: Box<dyn SubTypeFunctions>) -> TextOperationBuilder {
         TextOperationBuilder {
             path,
             offset: 0,
@@ -614,33 +663,52 @@ impl TextOperationBuilder {
         }
     }
 
-    fn insert(&mut self, offset: usize, insert: String) -> Self {
+    fn insert_string(mut self, offset: usize, insert: String) -> Self {
         self.insert_val = Some(insert);
         self.offset = offset;
         self
     }
 
-    fn delete(&mut self, offset: usize, delete: String) -> Self {
+    fn insert_str(mut self, offset: usize, insert: &str) -> Self {
+        self.insert_val = Some(insert.into());
+        self.offset = offset;
+        self
+    }
+
+    fn delete_string(mut self, offset: usize, delete: String) -> Self {
         self.delete_val = Some(delete);
         self.offset = offset;
         self
     }
 
+    fn delete_str(mut self, offset: usize, delete: &str) -> Self {
+        self.delete_val = Some(delete.into());
+        self.offset = offset;
+        self
+    }
+
     fn build(self) -> Result<OperationComponent> {
-        if self.insert_val.is_none() || self.delete(offset, delete).is {}
-        if let Some(o) = self.sub_type_operator {
-            if let Some(f) = self.sub_type_function {
-                OperationComponent::new(self.path, Operator::SubType2(self.sub_type, o, f))
-            } else {
-                Err(JsonError::InvalidOperation(
-                    "sub type functions is required".into(),
-                ))
-            }
-        } else {
-            Err(JsonError::InvalidOperation(
-                "sub type operator is required".into(),
-            ))
+        if self.insert_val.is_none() && self.delete_val.is_none()
+            || (self.insert_val.is_some() && self.delete_val.is_some())
+        {
+            return Err(JsonError::InvalidOperation(
+                "text operation must either insert or delete".into(),
+            ));
         }
+
+        let mut op_map = Map::new();
+        op_map.insert("p".into(), serde_json::to_value(self.offset).unwrap());
+        if let Some(v) = self.insert_val {
+            op_map.insert("i".into(), Value::String(v));
+        } else if let Some(v) = self.delete_val {
+            op_map.insert("d".into(), Value::String(v));
+        }
+
+        let o = Value::Object(op_map);
+        OperationComponent::new(
+            self.path,
+            Operator::SubType2(SubType::Text, o, self.sub_type_function),
+        )
     }
 }
 
@@ -725,20 +793,30 @@ impl OperationFactory {
         ObjectOperationBuilder::new(path)
     }
 
+    pub fn number_add_operation_builder(&self, path: Path) -> NumberAddOperationBuilder {
+        let f = self
+            .sub_type_holder
+            .get(&SubType::NumberAdd)
+            .map(|f| f.value().clone())
+            .unwrap();
+        NumberAddOperationBuilder::new(path, f)
+    }
+
     pub fn text_operation_builder(&self, path: Path) -> TextOperationBuilder {
         let f = self
             .sub_type_holder
             .get(&SubType::Text)
             .map(|f| f.value().clone())
             .unwrap();
-        TextOperationBuilder::new(path)
+        TextOperationBuilder::new(path, f)
     }
 
     pub fn sub_type_operation_builder(
         &self,
         path: Path,
-        sub_type: SubType,
+        sub_type_name: String,
     ) -> SubTypeOperationBuilder {
+        let sub_type = SubType::Custome(sub_type_name);
         let f = self
             .sub_type_holder
             .get(&sub_type)
@@ -857,7 +935,6 @@ impl OperationFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use log::info;
     use test_log::test;
 
     #[test]
@@ -865,8 +942,8 @@ mod tests {
         let path: Path = r#"["p1","p2"]"#.try_into().unwrap();
         let op_factory = OperationFactory::new(Rc::new(SubTypeFunctionsHolder::new()));
         let op = op_factory
-            .sub_type_operation_builder(path, SubType::NumberAdd)
-            .sub_type_operand(serde_json::to_value(100).unwrap())
+            .number_add_operation_builder(path)
+            .add_int(100)
             .build()
             .unwrap();
 
@@ -879,12 +956,12 @@ mod tests {
 
     #[test]
     fn test_text_operator() {
-        let sub_type_operand: Value = serde_json::from_str(r#"{"p":["p3"],"si":"hello"}"#).unwrap();
+        let sub_type_operand: Value = serde_json::from_str(r#"{"p":1, "i":"hello"}"#).unwrap();
         let path: Path = r#"["p1","p2"]"#.try_into().unwrap();
         let op_factory = OperationFactory::new(Rc::new(SubTypeFunctionsHolder::new()));
         let op = op_factory
-            .sub_type_operation_builder(path, SubType::Text)
-            .sub_type_operand(sub_type_operand.clone())
+            .text_operation_builder(path)
+            .insert_str(1, "hello")
             .build()
             .unwrap();
 
