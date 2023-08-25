@@ -134,8 +134,9 @@ impl Appliable for Value {
             },
             _ => match op {
                 Operator::SubType2(_, op, f) => {
-                    let v = f.apply(Some(self), &op)?;
-                    _ = mem::replace(self, v);
+                    if let Some(v) = f.apply(Some(self), &op)? {
+                        _ = mem::replace(self, v);
+                    }
                     Ok(())
                 }
                 _ => Err(JsonError::InvalidOperation(
@@ -154,8 +155,9 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
         let target_value = self.get(k);
         match &op {
             Operator::SubType2(_, op, f) => {
-                let v = f.apply(target_value, op)?;
-                self.insert(k.clone(), v);
+                if let Some(v) = f.apply(target_value, op)? {
+                    self.insert(k.clone(), v);
+                }
                 Ok(())
             }
             Operator::ObjectInsert(v) => {
@@ -211,8 +213,9 @@ impl Appliable for Vec<serde_json::Value> {
                 }
             }
             Operator::SubType2(_, op, f) => {
-                let v = f.apply(target_value, &op)?;
-                self[*index] = v;
+                if let Some(v) = f.apply(target_value, &op)? {
+                    self[*index] = v;
+                }
                 Ok(())
             }
             Operator::ListInsert(v) => {

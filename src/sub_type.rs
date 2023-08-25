@@ -1,12 +1,14 @@
 use std::collections::HashMap;
-use std::fmt::Display;
+use std::fmt::{format, Display};
 use std::hash::Hash;
 use std::vec;
 
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
+use serde::__private::de;
 use serde_json::{Map, Value};
 
+use crate::common::Validation;
 use crate::error::{JsonError, Result};
 use crate::operation::Operator;
 use crate::path::Path;
@@ -24,7 +26,7 @@ pub trait SubTypeFunctions {
 
     fn transform(&self, new: &Value, base: &Value, side: TransformSide) -> Result<Vec<Value>>;
 
-    fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Value>;
+    fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Option<Value>>;
 }
 
 impl Clone for Box<dyn SubTypeFunctions> {
@@ -187,25 +189,25 @@ impl SubTypeFunctions for NumberAddSubType {
         Ok(vec![new.clone()])
     }
 
-    fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Value> {
+    fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Option<Value>> {
         if let Value::Number(new_n) = sub_type_operand {
             if let Some(old_v) = val {
                 match old_v {
                     Value::Number(old_n) => {
                         if old_n.is_i64() && new_n.is_i64() {
-                            return Ok(serde_json::to_value(
+                            return Ok(Some(serde_json::to_value(
                                 old_n.as_i64().unwrap() + new_n.as_i64().unwrap(),
-                            )?);
+                            )?));
                         }
 
-                        Ok(serde_json::to_value(
+                        Ok(Some(serde_json::to_value(
                             old_n.as_f64().unwrap() + new_n.as_f64().unwrap(),
-                        )?)
+                        )?))
                     }
                     _ => Err(JsonError::BadPath),
                 }
             } else {
-                Ok(sub_type_operand.clone())
+                Ok(Some(sub_type_operand.clone()))
             }
         } else {
             Err(JsonError::InvalidOperation(format!(
@@ -219,6 +221,32 @@ impl SubTypeFunctions for NumberAddSubType {
 struct TextSubType {}
 
 impl TextSubType {
+    fn validate_sub_type_operand(&self, op: &Value) -> Result<()> {
+        let p = op.get("p");
+        if p.is_none() {
+            return Err(JsonError::InvalidOperation(
+                "text0 sub type operand does not contains Offset".into(),
+            ));
+        }
+
+        if let Some(insert) = op.get("i") {
+            if !insert.is_string() {
+                return Err(JsonError::InvalidOperation(
+                    format!("text0 insert non-string value: {}", insert).into(),
+                ));
+            }
+        }
+
+        if let Some(delete) = op.get("d") {
+            if !delete.is_string() {
+                return Err(JsonError::InvalidOperation(
+                    format!("text0 delete non-string value: {}", delete).into(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
     fn invert_object(&self, op: &serde_json::Map<String, Value>) -> Result<Map<String, Value>> {
         let mut new_op: Map<String, Value> = serde_json::Map::new();
         if let Some(p) = op.get("p") {
@@ -239,6 +267,7 @@ impl TextSubType {
         Ok(new_op)
     }
 }
+
 impl SubTypeFunctions for TextSubType {
     fn box_clone(&self) -> Box<dyn SubTypeFunctions> {
         Box::new(TextSubType {})
@@ -284,7 +313,17 @@ impl SubTypeFunctions for TextSubType {
         todo!()
     }
 
-    fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Value> {
+    fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Option<Value>> {
+        // if val.is_none() {
+        //     if Some(insert) = sub_type_operand.get("i") {
+        //         return;
+        //     } else {
+        //         return Ok(None);
+        //     }
+        // }
+        // if Some(v) = val {
+        // } else {
+        // }
         todo!()
     }
 }

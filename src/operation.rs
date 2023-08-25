@@ -592,6 +592,58 @@ impl ObjectOperationBuilder {
     }
 }
 
+pub struct TextOperationBuilder {
+    path: Path,
+    offset: usize,
+    insert_val: Option<String>,
+    delete_val: Option<String>,
+    sub_type_function: Option<Box<dyn SubTypeFunctions>>,
+}
+
+impl TextOperationBuilder {
+    fn new(
+        path: Path,
+        sub_type_function: Option<Box<dyn SubTypeFunctions>>,
+    ) -> TextOperationBuilder {
+        TextOperationBuilder {
+            path,
+            offset: 0,
+            insert_val: None,
+            delete_val: None,
+            sub_type_function,
+        }
+    }
+
+    fn insert(&mut self, offset: usize, insert: String) -> Self {
+        self.insert_val = Some(insert);
+        self.offset = offset;
+        self
+    }
+
+    fn delete(&mut self, offset: usize, delete: String) -> Self {
+        self.delete_val = Some(delete);
+        self.offset = offset;
+        self
+    }
+
+    fn build(self) -> Result<OperationComponent> {
+        if self.insert_val.is_none() || self.delete(offset, delete).is {}
+        if let Some(o) = self.sub_type_operator {
+            if let Some(f) = self.sub_type_function {
+                OperationComponent::new(self.path, Operator::SubType2(self.sub_type, o, f))
+            } else {
+                Err(JsonError::InvalidOperation(
+                    "sub type functions is required".into(),
+                ))
+            }
+        } else {
+            Err(JsonError::InvalidOperation(
+                "sub type operator is required".into(),
+            ))
+        }
+    }
+}
+
 pub struct SubTypeOperationBuilder {
     path: Path,
     sub_type: SubType,
@@ -671,6 +723,15 @@ impl OperationFactory {
 
     pub fn object_operation_builder(&self, path: Path) -> ObjectOperationBuilder {
         ObjectOperationBuilder::new(path)
+    }
+
+    pub fn text_operation_builder(&self, path: Path) -> TextOperationBuilder {
+        let f = self
+            .sub_type_holder
+            .get(&SubType::Text)
+            .map(|f| f.value().clone())
+            .unwrap();
+        TextOperationBuilder::new(path)
     }
 
     pub fn sub_type_operation_builder(
