@@ -620,6 +620,7 @@ impl NumberAddOperationBuilder {
     }
 
     fn build(self) -> Result<OperationComponent> {
+        // support insert/delete multipul numbers
         if self.number_f64.is_some() && self.number_i64.is_some() {
             return Err(JsonError::InvalidOperation(
                 "only one number can be add".into(),
@@ -688,6 +689,7 @@ impl TextOperationBuilder {
     }
 
     fn build(self) -> Result<OperationComponent> {
+        // support insert/delete multipul strings
         if self.insert_val.is_none() && self.delete_val.is_none()
             || (self.insert_val.is_some() && self.delete_val.is_some())
         {

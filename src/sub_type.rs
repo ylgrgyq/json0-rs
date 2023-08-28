@@ -314,16 +314,46 @@ impl SubTypeFunctions for TextSubType {
     }
 
     fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Option<Value>> {
-        // if val.is_none() {
-        //     if Some(insert) = sub_type_operand.get("i") {
-        //         return;
-        //     } else {
-        //         return Ok(None);
-        //     }
-        // }
-        // if Some(v) = val {
-        // } else {
-        // }
-        todo!()
+        let p = sub_type_operand.get("p").unwrap().as_u64().unwrap() as usize;
+        if let Some(v) = val {
+            match v {
+                Value::Null => {}
+                Value::String(s) => {
+                    if let Some(insert) = sub_type_operand.get("i") {
+                        return Ok(Some(Value::String(format!(
+                            "{}{}{}",
+                            &s[0..p],
+                            insert.as_str().unwrap(),
+                            &s[p..]
+                        ))));
+                    } else {
+                        let to_delete = sub_type_operand.get("d").unwrap().as_str().unwrap();
+                        let deleted = &s[p..to_delete.len()];
+                        if !to_delete.eq(deleted) {
+                            return Err(JsonError::InvalidOperation(format!(
+                                "text to delete in text operation is not match target text"
+                            )));
+                        }
+
+                        return Ok(Some(Value::String(format!(
+                            "{}{}",
+                            &s[0..p],
+                            &s[p + to_delete.len()..]
+                        ))));
+                    }
+                }
+                _ => {
+                    return Err(JsonError::InvalidOperation(format!(
+                        "can not apply text sub operation on value: {}",
+                        v
+                    )))
+                }
+            }
+        }
+
+        if let Some(insert) = sub_type_operand.get("i") {
+            return Ok(Some(insert.clone()));
+        }
+        return Ok(None);
     }
 }

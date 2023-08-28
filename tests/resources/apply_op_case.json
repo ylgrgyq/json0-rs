@@ -24,6 +24,36 @@
 [{"p":["p1"], "t": "na", "o":-0.1}]
 {"p1":0.0}
 
+# apply text 
+
+{"p1": null}
+[{"p":["p1"], "t": "text", "o": {"p":2, "i":"hello"}}]
+{"p1":"hello"}
+
+{"p1": null}
+[{"p":["p1"], "t": "text", "o": {"p":2, "d":"hello"}}]
+{"p1":null}
+
+{}
+[{"p":["p1"], "t": "text", "o": {"p":2, "i":"hello"}}]
+{"p1":"hello"}
+
+{}
+[{"p":["p1"], "t": "text", "o": {"p":2, "d":"hello"}}]
+{}
+
+{"p1": "Mr. J"}
+[{"p":["p1"], "t": "text", "o": {"p":5, "i":", hello"}}]
+{"p1": "Mr. J, hello"}
+
+{"p1": "Mr. J"}
+[{"p":["p1"], "t": "text", "o": {"p":0, "i":"hello, "}}]
+{"p1": "hello, Mr. J"}
+
+{"p1": "AB"}
+[{"p":["p1"], "t": "text", "o": {"p":1, "i":" Middle "}}]
+{"p1": "A Middle B"}
+
 # object insert
 
 {}
