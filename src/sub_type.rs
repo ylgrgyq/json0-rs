@@ -1,14 +1,11 @@
-use std::collections::HashMap;
-use std::fmt::{format, Display};
+use std::fmt::Display;
 use std::hash::Hash;
 use std::vec;
 
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
-use serde::__private::de;
 use serde_json::{Map, Value};
 
-use crate::common::Validation;
 use crate::error::{JsonError, Result};
 use crate::operation::Operator;
 use crate::path::Path;
@@ -27,6 +24,8 @@ pub trait SubTypeFunctions {
     fn transform(&self, new: &Value, base: &Value, side: TransformSide) -> Result<Vec<Value>>;
 
     fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Option<Value>>;
+
+    fn validate_operand(&self, val: &Value) -> Result<()>;
 }
 
 impl Clone for Box<dyn SubTypeFunctions> {
@@ -216,37 +215,20 @@ impl SubTypeFunctions for NumberAddSubType {
             )))
         }
     }
+
+    fn validate_operand(&self, val: &Value) -> Result<()> {
+        match val {
+            Value::Number(_) => Ok(()),
+            _ => Err(JsonError::InvalidOperation(
+                "Value in AddNumber operator is not a number".into(),
+            )),
+        }
+    }
 }
 
 struct TextSubType {}
 
 impl TextSubType {
-    fn validate_sub_type_operand(&self, op: &Value) -> Result<()> {
-        let p = op.get("p");
-        if p.is_none() {
-            return Err(JsonError::InvalidOperation(
-                "text0 sub type operand does not contains Offset".into(),
-            ));
-        }
-
-        if let Some(insert) = op.get("i") {
-            if !insert.is_string() {
-                return Err(JsonError::InvalidOperation(
-                    format!("text0 insert non-string value: {}", insert).into(),
-                ));
-            }
-        }
-
-        if let Some(delete) = op.get("d") {
-            if !delete.is_string() {
-                return Err(JsonError::InvalidOperation(
-                    format!("text0 delete non-string value: {}", delete).into(),
-                ));
-            }
-        }
-        Ok(())
-    }
-
     fn invert_object(&self, op: &serde_json::Map<String, Value>) -> Result<Map<String, Value>> {
         let mut new_op: Map<String, Value> = serde_json::Map::new();
         if let Some(p) = op.get("p") {
@@ -306,7 +288,11 @@ impl SubTypeFunctions for TextSubType {
     }
 
     fn merge(&self, base: &Value, other: &Operator) -> Option<Operator> {
-        todo!()
+        if let Operator::SubType2(sub_type, sub_type_operand, f) = other {
+            if SubType::Text.eq(sub_type) {}
+        }
+
+        None
     }
 
     fn transform(&self, new: &Value, base: &Value, side: TransformSide) -> Result<Vec<Value>> {
@@ -355,5 +341,31 @@ impl SubTypeFunctions for TextSubType {
             return Ok(Some(insert.clone()));
         }
         return Ok(None);
+    }
+
+    fn validate_operand(&self, val: &Value) -> Result<()> {
+        let p = val.get("p");
+        if p.is_none() {
+            return Err(JsonError::InvalidOperation(
+                "text sub type operand does not contains Offset".into(),
+            ));
+        }
+
+        if let Some(insert) = val.get("i") {
+            if !insert.is_string() {
+                return Err(JsonError::InvalidOperation(
+                    format!("text insert non-string value: {}", insert).into(),
+                ));
+            }
+        }
+
+        if let Some(delete) = val.get("d") {
+            if !delete.is_string() {
+                return Err(JsonError::InvalidOperation(
+                    format!("text delete non-string value: {}", delete).into(),
+                ));
+            }
+        }
+        Ok(())
     }
 }

@@ -117,15 +117,10 @@ impl Operator {
 
 impl Validation for Operator {
     fn validates(&self) -> Result<()> {
-        match self {
-            Operator::AddNumber(v) => match v {
-                Value::Number(_) => Ok(()),
-                _ => Err(JsonError::InvalidOperation(
-                    "Value in AddNumber operator is not a number".into(),
-                )),
-            },
-            _ => Ok(()),
+        if let Operator::SubType2(_, operand, f) = self {
+            return f.validate_operand(operand);
         }
+        Ok(())
     }
 }
 
