@@ -10,3 +10,50 @@
 [{"p":["p1", "p2"], "na":-100.0}]
 [{"p":["p1"], "na":100.0},{"p":["p1", "p2"], "na":-100.0}]
 
+[{"p":["p1"], "t":"text", "o":{"p":2, "i":"hello"}}]
+[{"p":["p1"], "t":"text", "o":{"p":2, "d":"world"}}]
+[{"p":["p1"], "t":"text", "o":{"p":2, "i":"hello"}}, {"p":["p1"], "t":"text", "o":{"p":2, "d":"world"}}]
+
+[{"p":["p1"], "t":"text", "o":{"p":2, "i":"hello"}}]
+[{"p":["p1"], "t":"text", "o":{"p":2, "i":"world"}}]
+[{"p":["p1"], "t":"text", "o":{"p":2, "i":"worldhello"}}]
+
+[{"p":["p1"], "t":"text", "o":{"p":2, "i":"hello"}}]
+[{"p":["p1"], "t":"text", "o":{"p":4, "i":"world"}}]
+[{"p":["p1"], "t":"text", "o":{"p":2, "i":"heworldllo"}}]
+
+[{"p":["p1"], "t":"text", "o":{"p":2, "i":"hello"}}]
+[{"p":["p1"], "t":"text", "o":{"p":7, "i":"world"}}]
+[{"p":["p1"], "t":"text", "o":{"p":2, "i":"helloworld"}}]
+
+[{"p":["p1"], "t":"text", "o":{"p":2, "i":"hello"}}]
+[{"p":["p1"], "t":"text", "o":{"p":1, "i":"world"}}]
+[{"p":["p1"], "t":"text", "o":{"p":2, "i":"hello"}}, {"p":["p1"], "t":"text", "o":{"p":1, "i":"world"}}]
+
+[{"p":["p1"], "t":"text", "o":{"p":2, "i":"hello"}}]
+[{"p":["p1"], "t":"text", "o":{"p":8, "i":"world"}}]
+[{"p":["p1"], "t":"text", "o":{"p":2, "i":"hello"}}, {"p":["p1"], "t":"text", "o":{"p":8, "i":"world"}}]
+
+[{"p":["p1"], "t":"text", "o":{"p":2, "i":"hello"}}]
+[{"p":["p1", "p2"], "t":"text", "o":{"p":2, "i":"hello"}}]
+[{"p":["p1"], "t":"text", "o":{"p":2, "i":"hello"}},{"p":["p1", "p2"], "t":"text", "o":{"p":2, "i":"hello"}}]
+
+[{"p":["p1"], "t":"text", "o":{"p":2, "d":"hello"}}]
+[{"p":["p1"], "t":"text", "o":{"p":2, "d":"world"}}]
+[{"p":["p1"], "t":"text", "o":{"p":2, "d":"helloworld"}}]
+
+[{"p":["p1"], "t":"text", "o":{"p":4, "d":"hello"}}]
+[{"p":["p1"], "t":"text", "o":{"p":2, "d":"world"}}]
+[{"p":["p1"], "t":"text", "o":{"p":2, "d":"wohellorld"}}]
+
+[{"p":["p1"], "t":"text", "o":{"p":7, "d":"hello"}}]
+[{"p":["p1"], "t":"text", "o":{"p":2, "d":"world"}}]
+[{"p":["p1"], "t":"text", "o":{"p":2, "d":"worldhello"}}]
+
+[{"p":["p1"], "t":"text", "o":{"p":1, "d":"hello"}}]
+[{"p":["p1"], "t":"text", "o":{"p":2, "d":"world"}}]
+[{"p":["p1"], "t":"text", "o":{"p":1, "d":"hello"}}, {"p":["p1"], "t":"text", "o":{"p":2, "d":"world"}}]
+
+[{"p":["p1"], "t":"text", "o":{"p":8, "d":"hello"}}]
+[{"p":["p1"], "t":"text", "o":{"p":2, "d":"world"}}]
+[{"p":["p1"], "t":"text", "o":{"p":8, "d":"hello"}}, {"p":["p1"], "t":"text", "o":{"p":2, "d":"world"}}]

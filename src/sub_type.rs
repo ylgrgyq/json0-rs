@@ -289,7 +289,57 @@ impl SubTypeFunctions for TextSubType {
 
     fn merge(&self, base: &Value, other: &Operator) -> Option<Operator> {
         if let Operator::SubType2(sub_type, sub_type_operand, f) = other {
-            if SubType::Text.eq(sub_type) {}
+            if SubType::Text.eq(sub_type) {
+                let base_i = base.get("i");
+                let other_i = sub_type_operand.get("i");
+                let base_p = base.get("p").unwrap().as_u64().unwrap() as usize;
+                let other_p = sub_type_operand.get("p").unwrap().as_u64().unwrap() as usize;
+                let base_d = base.get("d");
+                let other_d = sub_type_operand.get("d");
+
+                if base_i.is_some()
+                    && other_i.is_some()
+                    && base_p <= other_p
+                    && other_p <= base_p + base_i.unwrap().as_str().unwrap().len()
+                {
+                    let s = Value::String(format!(
+                        "{}{}{}",
+                        &base_i.unwrap().as_str().unwrap()[0..other_p - base_p],
+                        &other_i.unwrap().as_str().unwrap(),
+                        &base_i.unwrap().as_str().unwrap()[other_p - base_p..],
+                    ));
+                    let mut m = Map::new();
+                    m.insert("p".into(), serde_json::to_value(base_p).unwrap());
+                    m.insert("i".into(), s);
+
+                    return Some(Operator::SubType2(
+                        SubType::Text,
+                        Value::Object(m),
+                        self.box_clone(),
+                    ));
+                }
+                if base_d.is_some()
+                    && other_d.is_some()
+                    && other_p <= base_p
+                    && base_p <= other_p + other_d.unwrap().as_str().unwrap().len()
+                {
+                    let s = Value::String(format!(
+                        "{}{}{}",
+                        &other_d.unwrap().as_str().unwrap()[0..base_p - other_p],
+                        &base_d.unwrap().as_str().unwrap(),
+                        &other_d.unwrap().as_str().unwrap()[base_p - other_p..],
+                    ));
+                    let mut m = Map::new();
+                    m.insert("p".into(), serde_json::to_value(other_p).unwrap());
+                    m.insert("d".into(), s);
+
+                    return Some(Operator::SubType2(
+                        SubType::Text,
+                        Value::Object(m),
+                        self.box_clone(),
+                    ));
+                }
+            }
         }
 
         None
