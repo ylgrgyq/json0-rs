@@ -21,7 +21,7 @@ pub trait SubTypeFunctions {
 
     fn merge(&self, base_operand: &Value, other: &Operator) -> Option<Operator>;
 
-    fn transform(&self, new: &Value, base: &Value, side: TransformSide) -> Result<Vec<Value>>;
+    fn transform(&self, new: &Value, base: &Value, side: TransformSide) -> Result<Value>;
 
     fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Option<Value>>;
 
@@ -184,8 +184,8 @@ impl SubTypeFunctions for NumberAddSubType {
         }
     }
 
-    fn transform(&self, new: &Value, _: &Value, _: TransformSide) -> Result<Vec<Value>> {
-        Ok(vec![new.clone()])
+    fn transform(&self, new: &Value, _: &Value, _: TransformSide) -> Result<Value> {
+        Ok(new.clone())
     }
 
     fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Option<Value>> {
@@ -248,6 +248,25 @@ impl TextSubType {
         }
         Ok(new_op)
     }
+
+    fn transform_position(&self, pos: usize, op: &Value, insertAfter: bool) -> usize {
+        let p = op.get("p").unwrap().as_i64().unwrap() as usize;
+        if let Some(i) = op.get("i") {
+            if p < pos || (p == pos && insertAfter) {
+                return pos + i.as_str().unwrap().len();
+            } else {
+                return pos;
+            }
+        } else {
+            if pos <= p {
+                return pos;
+            } else if (pos <= p + op.get("d").unwrap().as_str().unwrap().len()) {
+                return p;
+            } else {
+                return pos - op.get("d").unwrap().as_str().unwrap().len();
+            }
+        }
+    }
 }
 
 impl SubTypeFunctions for TextSubType {
@@ -288,7 +307,7 @@ impl SubTypeFunctions for TextSubType {
     }
 
     fn merge(&self, base: &Value, other: &Operator) -> Option<Operator> {
-        if let Operator::SubType2(sub_type, sub_type_operand, f) = other {
+        if let Operator::SubType2(sub_type, sub_type_operand, _) = other {
             if SubType::Text.eq(sub_type) {
                 let base_i = base.get("i");
                 let other_i = sub_type_operand.get("i");
@@ -345,7 +364,22 @@ impl SubTypeFunctions for TextSubType {
         None
     }
 
-    fn transform(&self, new: &Value, base: &Value, side: TransformSide) -> Result<Vec<Value>> {
+    fn transform(&self, new: &Value, base: &Value, side: TransformSide) -> Result<Value> {
+        if let Some(i) = new.get("i") {
+            let mut op = Map::new();
+            op.insert("i".into(), i.clone());
+            op.insert(
+                "p".into(),
+                serde_json::to_value(self.transform_position(
+                    new.get("p").unwrap().as_i64().unwrap() as usize,
+                    base,
+                    side == TransformSide::RIGHT,
+                ))
+                .unwrap(),
+            );
+            return Ok(Value::Object(op));
+        } else {
+        }
         todo!()
     }
 
