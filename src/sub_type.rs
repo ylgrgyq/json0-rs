@@ -4,6 +4,7 @@ use std::vec;
 
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
+use serde::__private::de;
 use serde_json::{Map, Value};
 
 use crate::error::{JsonError, Result};
@@ -21,7 +22,7 @@ pub trait SubTypeFunctions {
 
     fn merge(&self, base_operand: &Value, other: &Operator) -> Option<Operator>;
 
-    fn transform(&self, new: &Value, base: &Value, side: TransformSide) -> Result<Value>;
+    fn transform(&self, new: &Value, base: &Value, side: TransformSide) -> Result<Vec<Value>>;
 
     fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Option<Value>>;
 
@@ -184,8 +185,8 @@ impl SubTypeFunctions for NumberAddSubType {
         }
     }
 
-    fn transform(&self, new: &Value, _: &Value, _: TransformSide) -> Result<Value> {
-        Ok(new.clone())
+    fn transform(&self, new: &Value, _: &Value, _: TransformSide) -> Result<Vec<Value>> {
+        Ok(vec![new.clone()])
     }
 
     fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Option<Value>> {
@@ -224,6 +225,88 @@ impl SubTypeFunctions for NumberAddSubType {
             )),
         }
     }
+}
+
+struct TextOperand {
+    offset: usize,
+    insert: Option<String>,
+    delete: Option<String>,
+}
+
+impl TryFrom<&Value> for TextOperand {
+    type Error = JsonError;
+
+    fn try_from(val: &Value) -> std::result::Result<Self, Self::Error> {
+        let p = val.get("p");
+        if p.is_none() {
+            return Err(JsonError::InvalidOperation(
+                "text sub type operand does not contains Offset".into(),
+            ));
+        }
+        if !p.unwrap().is_i64() {
+            return Err(JsonError::InvalidOperation(format!(
+                "offset: {} in text sub type operand is not value number",
+                p.unwrap()
+            )));
+        }
+
+        let offset = p.unwrap().as_i64().unwrap() as usize;
+
+        if let Some(insert) = val.get("i") {
+            if !insert.is_string() {
+                return Err(JsonError::InvalidOperation(
+                    format!("text insert non-string value: {}", insert).into(),
+                ));
+            }
+            return Ok(TextOperand {
+                offset,
+                insert: Some(insert.as_str().unwrap().into()),
+                delete: None,
+            });
+        }
+
+        if let Some(delete) = val.get("d") {
+            if !delete.is_string() {
+                return Err(JsonError::InvalidOperation(
+                    format!("text delete non-string value: {}", delete).into(),
+                ));
+            }
+            return Ok(TextOperand {
+                offset,
+                insert: None,
+                delete: Some(delete.as_str().unwrap().into()),
+            });
+        }
+        Err(JsonError::InvalidOperation(
+            format!("invalid text operand: {}", val).into(),
+        ))
+    }
+
+    // fn validate_operand(&self, val: &Value) -> Result<()> {
+    //     let p = val.get("p");
+    //     if p.is_none() {
+    //         return Err(JsonError::InvalidOperation(
+    //             "text sub type operand does not contains Offset".into(),
+    //         ));
+    //     }
+
+    //     if let Some(insert) = val.get("i") {
+    //         if !insert.is_string() {
+    //             return Err(JsonError::InvalidOperation(
+    //                 format!("text insert non-string value: {}", insert).into(),
+    //             ));
+    //         }
+    //     }
+
+    //     if let Some(delete) = val.get("d") {
+    //         if !delete.is_string() {
+    //             return Err(JsonError::InvalidOperation(
+    //                 format!("text delete non-string value: {}", delete).into(),
+    //             ));
+    //         }
+    //     }
+    //     Ok(())
+    // }
 }
 
 struct TextSubType {}
@@ -364,7 +447,7 @@ impl SubTypeFunctions for TextSubType {
         None
     }
 
-    fn transform(&self, new: &Value, base: &Value, side: TransformSide) -> Result<Value> {
+    fn transform(&self, new: &Value, base: &Value, side: TransformSide) -> Result<Vec<Value>> {
         if let Some(i) = new.get("i") {
             let mut op = Map::new();
             op.insert("i".into(), i.clone());
@@ -377,10 +460,33 @@ impl SubTypeFunctions for TextSubType {
                 ))
                 .unwrap(),
             );
-            return Ok(Value::Object(op));
+            return Ok(vec![Value::Object(op)]);
         } else {
+            let mut ops = vec![];
+            let mut d_str = new.get("d").unwrap().as_str().unwrap();
+            if let Some(base_i) = base.get("i") {
+                let base_p = base.get("p").unwrap().as_u64().unwrap() as usize;
+                let new_p = new.get("p").unwrap().as_u64().unwrap() as usize;
+                if new_p < base_p {
+                    let mut op = Map::new();
+                    op.insert("p".into(), new.get("p").unwrap().clone());
+                    op.insert("d".into(), Value::String(d_str[0..(base_p - new_p)].into()));
+                    ops.push(op);
+                    d_str = &d_str[base_p - new_p..];
+                }
+                if !d_str.is_empty() {
+                    let mut op = Map::new();
+                    op.insert(
+                        "p".into(),
+                        serde_json::to_value(new_p + base_i.as_str().unwrap().len()).unwrap(),
+                    );
+                    op.insert("d".into(), Value::String(d_str.into()));
+                    ops.push(op);
+                }
+            } else {
+            }
         }
-        todo!()
+        Ok(vec![])
     }
 
     fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Option<Value>> {
