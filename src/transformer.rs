@@ -1,7 +1,5 @@
 use std::rc::Rc;
 
-use log::info;
-
 use crate::common::Validation;
 use crate::error::Result;
 use crate::json::Appliable;
