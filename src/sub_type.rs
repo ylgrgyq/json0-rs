@@ -4,7 +4,6 @@ use std::vec;
 
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
-use serde::__private::de;
 use serde_json::{Map, Value};
 
 use crate::error::{JsonError, Result};
@@ -227,10 +226,65 @@ impl SubTypeFunctions for NumberAddSubType {
     }
 }
 
+#[derive(Debug, PartialEq)]
 struct TextOperand {
     offset: usize,
     insert: Option<String>,
     delete: Option<String>,
+}
+
+impl TextOperand {
+    fn new_insert(offset: usize, insert: String) -> TextOperand {
+        TextOperand {
+            offset,
+            insert: Some(insert),
+            delete: None,
+        }
+    }
+    fn new_delete(offset: usize, delete: String) -> TextOperand {
+        TextOperand {
+            offset,
+            insert: None,
+            delete: Some(delete),
+        }
+    }
+    fn is_insert(&self) -> bool {
+        self.insert.is_some()
+    }
+    fn is_delete(&self) -> bool {
+        self.delete.is_some()
+    }
+    fn get_insert(&self) -> &Option<String> {
+        &self.insert
+    }
+    fn get_delete(&self) -> &Option<String> {
+        &self.delete
+    }
+    fn uncheck_get_insert(&self) -> String {
+        self.get_insert().as_ref().unwrap().clone()
+    }
+    fn uncheck_get_delete(&self) -> String {
+        self.get_delete().as_ref().unwrap().clone()
+    }
+    fn to_value(&self) -> Value {
+        let mut op = Map::new();
+        op.insert("p".into(), serde_json::to_value(self.offset).unwrap());
+
+        if let Some(i) = &self.insert {
+            op.insert("i".into(), Value::String(i.clone()));
+        }
+
+        if let Some(d) = &self.delete {
+            op.insert("d".into(), Value::String(d.clone()));
+        }
+        Value::Object(op)
+    }
+}
+
+impl PartialOrd for TextOperand {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.offset.partial_cmp(&other.offset)
+    }
 }
 
 impl TryFrom<&Value> for TextOperand {
@@ -253,6 +307,15 @@ impl TryFrom<&Value> for TextOperand {
         let offset = p.unwrap().as_i64().unwrap() as usize;
 
         if let Some(insert) = val.get("i") {
+            if val.get("d").is_some() {
+                return Err(JsonError::InvalidOperation(
+                    format!(
+                        "invalid text operand: {}, insert and delete at the same time",
+                        val
+                    )
+                    .into(),
+                ));
+            }
             if !insert.is_string() {
                 return Err(JsonError::InvalidOperation(
                     format!("text insert non-string value: {}", insert).into(),
@@ -281,32 +344,6 @@ impl TryFrom<&Value> for TextOperand {
             format!("invalid text operand: {}", val).into(),
         ))
     }
-
-    // fn validate_operand(&self, val: &Value) -> Result<()> {
-    //     let p = val.get("p");
-    //     if p.is_none() {
-    //         return Err(JsonError::InvalidOperation(
-    //             "text sub type operand does not contains Offset".into(),
-    //         ));
-    //     }
-
-    //     if let Some(insert) = val.get("i") {
-    //         if !insert.is_string() {
-    //             return Err(JsonError::InvalidOperation(
-    //                 format!("text insert non-string value: {}", insert).into(),
-    //             ));
-    //         }
-    //     }
-
-    //     if let Some(delete) = val.get("d") {
-    //         if !delete.is_string() {
-    //             return Err(JsonError::InvalidOperation(
-    //                 format!("text delete non-string value: {}", delete).into(),
-    //             ));
-    //         }
-    //     }
-    //     Ok(())
-    // }
 }
 
 struct TextSubType {}
@@ -332,21 +369,21 @@ impl TextSubType {
         Ok(new_op)
     }
 
-    fn transform_position(&self, pos: usize, op: &Value, insertAfter: bool) -> usize {
-        let p = op.get("p").unwrap().as_i64().unwrap() as usize;
-        if let Some(i) = op.get("i") {
-            if p < pos || (p == pos && insertAfter) {
-                return pos + i.as_str().unwrap().len();
+    fn transform_position(&self, pos: usize, op: &TextOperand, insert_after: bool) -> usize {
+        let p = op.offset;
+        if let Some(i) = &op.insert {
+            if p < pos || (p == pos && insert_after) {
+                return pos + i.len();
             } else {
                 return pos;
             }
         } else {
             if pos <= p {
                 return pos;
-            } else if (pos <= p + op.get("d").unwrap().as_str().unwrap().len()) {
+            } else if pos <= p + op.delete.as_ref().unwrap().len() {
                 return p;
             } else {
-                return pos - op.get("d").unwrap().as_str().unwrap().len();
+                return pos - op.delete.as_ref().unwrap().len();
             }
         }
     }
@@ -448,45 +485,65 @@ impl SubTypeFunctions for TextSubType {
     }
 
     fn transform(&self, new: &Value, base: &Value, side: TransformSide) -> Result<Vec<Value>> {
-        if let Some(i) = new.get("i") {
-            let mut op = Map::new();
-            op.insert("i".into(), i.clone());
-            op.insert(
-                "p".into(),
-                serde_json::to_value(self.transform_position(
-                    new.get("p").unwrap().as_i64().unwrap() as usize,
-                    base,
-                    side == TransformSide::RIGHT,
-                ))
-                .unwrap(),
+        let new_operand: TextOperand = new.try_into()?;
+        let base_operand: TextOperand = base.try_into()?;
+        let mut ops = vec![];
+        if new_operand.is_insert() {
+            let p = self.transform_position(
+                new_operand.offset,
+                &base_operand,
+                side == TransformSide::RIGHT,
             );
-            return Ok(vec![Value::Object(op)]);
+            ops.push(TextOperand::new_insert(p, new_operand.insert.unwrap()).to_value())
         } else {
-            let mut ops = vec![];
-            let mut d_str = new.get("d").unwrap().as_str().unwrap();
-            if let Some(base_i) = base.get("i") {
-                let base_p = base.get("p").unwrap().as_u64().unwrap() as usize;
-                let new_p = new.get("p").unwrap().as_u64().unwrap() as usize;
-                if new_p < base_p {
-                    let mut op = Map::new();
-                    op.insert("p".into(), new.get("p").unwrap().clone());
-                    op.insert("d".into(), Value::String(d_str[0..(base_p - new_p)].into()));
-                    ops.push(op);
-                    d_str = &d_str[base_p - new_p..];
+            let mut d_str = new_operand.uncheck_get_delete();
+            if let Some(base_i) = base_operand.get_insert() {
+                let base_p = base_operand.offset;
+                let new_p = new_operand.offset;
+                if new_operand < base_operand {
+                    ops.push(
+                        TextOperand::new_delete(
+                            new_operand.offset,
+                            d_str[0..(base_p - new_p)].into(),
+                        )
+                        .to_value(),
+                    );
+                    d_str = d_str[base_p - new_p..].into();
                 }
                 if !d_str.is_empty() {
-                    let mut op = Map::new();
-                    op.insert(
-                        "p".into(),
-                        serde_json::to_value(new_p + base_i.as_str().unwrap().len()).unwrap(),
+                    ops.push(
+                        TextOperand::new_delete(new_operand.offset + base_i.len(), d_str.into())
+                            .to_value(),
                     );
-                    op.insert("d".into(), Value::String(d_str.into()));
-                    ops.push(op);
                 }
             } else {
+                // Delete vs Delete
+                let base_d_str = base_operand.uncheck_get_delete();
+                if new_operand.offset >= base_operand.offset + base_d_str.len() {
+                    ops.push(
+                        TextOperand::new_delete(new_operand.offset - base_d_str.len(), d_str)
+                            .to_value(),
+                    )
+                } else if new_operand.offset + d_str.len() <= base_operand.offset {
+                    ops.push(new.clone())
+                } else {
+                    let mut new_d = "";
+                    if new_operand.offset < base_operand.offset {
+                        new_d = &d_str[0..base_operand.offset - new_operand.offset]
+                    }
+                    if new_operand.offset + d_str.len() > base_operand.offset + base_d_str.len() {
+                        new_d =
+                            &d_str[base_operand.offset + base_d_str.len() - new_operand.offset..]
+                    }
+
+                    if !new_d.is_empty() {
+                        let p = self.transform_position(new_operand.offset, &base_operand, false);
+                        ops.push(TextOperand::new_delete(p, new_d.into()).to_value());
+                    }
+                }
             }
         }
-        Ok(vec![])
+        Ok(ops)
     }
 
     fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Option<Value>> {
