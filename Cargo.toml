@@ -2,7 +2,7 @@
 name = "json0-rs"
 version = "0.1.0"
 edition = "2021"
-licence = "MIT
+licence = "MIT"
 description = "JSON0 OT implement in rust."
 
 [[test]]
