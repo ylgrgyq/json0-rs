@@ -310,13 +310,13 @@ impl OperationComponent {
         Some(op)
     }
 
-    pub fn operate_path(&self) -> Path {
+    pub fn operate_path_len(&self) -> usize {
         match self.operator {
-            Operator::SubType2(_, _, _) | Operator::AddNumber(_) => self.path.clone(),
+            Operator::SubType2(_, _, _) | Operator::AddNumber(_) => self.path.clone().len(),
             _ => {
                 let mut p = self.path.clone();
                 p.get_mut_elements().pop();
-                p
+                p.len()
             }
         }
     }

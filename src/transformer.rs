@@ -1,5 +1,7 @@
 use std::rc::Rc;
 
+use log::info;
+
 use crate::common::Validation;
 use crate::error::Result;
 use crate::json::Appliable;
@@ -132,21 +134,16 @@ impl Transformer {
         side: TransformSide,
     ) -> Result<Vec<OperationComponent>> {
         let mut new_op = new_op;
-
-        let max_common_path = base_op.path.max_common_path(&new_op.path);
-        if max_common_path.is_empty() {
-            // new_op and base_op does not have common path
-            return Ok(vec![new_op]);
-        }
-
         if is_equivalent_to_noop(&new_op) || is_equivalent_to_noop(base_op) {
             return Ok(vec![new_op]);
         }
 
-        let new_operate_path = new_op.operate_path();
-        let base_operate_path = base_op.operate_path();
-        if max_common_path.len() < new_operate_path.len()
-            && max_common_path.len() < base_operate_path.len()
+        let max_common_path = base_op.path.max_common_path(&new_op.path);
+        let new_operate_path_len = new_op.operate_path_len();
+        let base_operate_path_len = base_op.operate_path_len();
+
+        if max_common_path.len() < new_operate_path_len
+            && max_common_path.len() < base_operate_path_len
         {
             // common path must be equal to new_op's or base_op's operate path
             // or base_op and new_op is operating on orthogonal value
@@ -158,7 +155,7 @@ impl Transformer {
         // new_op, base_op
         // [p1,p2,p3], [p1,p2,p4,p5]
         // [p1,p2,p3], [p1,p2,p3,p5]
-        if base_operate_path.len() > new_operate_path.len() {
+        if base_operate_path_len > new_operate_path_len {
             // if base_op's path is longger and contains new_op's path, new_op should include base_op's effect
             if new_op.path.is_prefix_of(&base_op.path) {
                 self.consume(&mut new_op, &max_common_path, base_op)?;
@@ -219,7 +216,7 @@ impl Transformer {
                 if let Operator::ListInsert(_) = &new_op.operator {
                     if same_operand && base_op_is_prefix {
                         if side == TransformSide::RIGHT {
-                            new_op.path.increase_index(base_operate_path.len());
+                            new_op.path.increase_index(base_operate_path_len);
                         }
                         return Ok(vec![new_op]);
                     }
@@ -227,18 +224,18 @@ impl Transformer {
 
                 if base_op
                     .path
-                    .get(base_operate_path.len())
-                    .and_then(|p1| new_op.path.get(base_operate_path.len()).map(|p2| p1 <= p2))
+                    .get(base_operate_path_len)
+                    .and_then(|p1| new_op.path.get(base_operate_path_len).map(|p2| p1 <= p2))
                     .unwrap_or(false)
                 {
-                    new_op.path.increase_index(base_operate_path.len());
+                    new_op.path.increase_index(base_operate_path_len);
                 }
 
                 if let Operator::ListMove(lm) = &mut new_op.operator {
                     if same_operand
                         && base_op
                             .path
-                            .get(base_operate_path.len())
+                            .get(base_operate_path_len)
                             .map(|p| p <= &PathElement::Index(*lm))
                             .unwrap_or(false)
                     {
@@ -247,8 +244,8 @@ impl Transformer {
                 }
             }
             Operator::ListDelete(_) => {
-                let base_op_operate_path = base_op.path.get(base_operate_path.len()).unwrap();
-                let new_op_operate_path = new_op.path.get(base_operate_path.len()).unwrap();
+                let base_op_operate_path = base_op.path.get(base_operate_path_len).unwrap();
+                let new_op_operate_path = new_op.path.get(base_operate_path_len).unwrap();
                 if let Operator::ListMove(lm) = new_op.operator {
                     if same_operand {
                         if base_op_is_prefix {
@@ -265,7 +262,7 @@ impl Transformer {
                 }
 
                 if base_op_operate_path < new_op_operate_path {
-                    new_op.path.decrease_index(base_operate_path.len());
+                    new_op.path.decrease_index(base_operate_path_len);
                 } else if base_op_is_prefix {
                     if !same_operand {
                         // we're below the deleted element, so -> noop
@@ -369,14 +366,14 @@ impl Transformer {
                 if same_operand {
                     match &mut new_op.operator {
                         Operator::ListMove(new_op_lm) => {
-                            let other_from = base_op.path.get(new_operate_path.len()).unwrap();
+                            let other_from = base_op.path.get(new_operate_path_len).unwrap();
                             let other_to = PathElement::Index(*lm);
 
                             if other_from == &other_to {
                                 return Ok(vec![new_op]);
                             }
 
-                            let from = new_op.path.get(new_operate_path.len()).unwrap().clone();
+                            let from = new_op.path.get(new_operate_path_len).unwrap().clone();
                             let to: PathElement = PathElement::Index(*new_op_lm);
 
                             if &from == other_from {
@@ -385,9 +382,7 @@ impl Transformer {
                                     return Ok(vec![]);
                                 }
                                 if side == TransformSide::LEFT {
-                                    new_op
-                                        .path
-                                        .replace(base_operate_path.len(), other_to.clone());
+                                    new_op.path.replace(base_operate_path_len, other_to.clone());
                                     if from == to {
                                         new_op.operator = base_op.operator.clone();
                                     }
@@ -397,12 +392,12 @@ impl Transformer {
                             } else {
                                 let mut n_lm = *new_op_lm;
                                 if &from > other_from {
-                                    new_op.path.decrease_index(base_operate_path.len());
+                                    new_op.path.decrease_index(base_operate_path_len);
                                 }
                                 if from > other_to {
-                                    new_op.path.increase_index(base_operate_path.len());
+                                    new_op.path.increase_index(base_operate_path_len);
                                 } else if from == other_to && other_from > &other_to {
-                                    new_op.path.increase_index(base_operate_path.len());
+                                    new_op.path.increase_index(base_operate_path_len);
                                     if from == to {
                                         n_lm += 1;
                                     }
@@ -430,7 +425,7 @@ impl Transformer {
                             return Ok(vec![new_op]);
                         }
                         Operator::ListInsert(_) => {
-                            let operate_index = base_operate_path.len();
+                            let operate_index = base_operate_path_len;
                             let from = base_op.path.get(operate_index).unwrap();
                             let to = *lm;
                             let p = new_op.path.get(operate_index).unwrap().clone();
@@ -445,17 +440,17 @@ impl Transformer {
                         _ => {}
                     }
                 }
-                let from = base_op.path.get(base_operate_path.len()).unwrap();
+                let from = base_op.path.get(base_operate_path_len).unwrap();
                 let to = PathElement::Index(*lm);
-                let p = new_op.path.get(base_operate_path.len()).unwrap().clone();
+                let p = new_op.path.get(base_operate_path_len).unwrap().clone();
                 if &p == from {
-                    new_op.path.replace(base_operate_path.len(), to.clone());
+                    new_op.path.replace(base_operate_path_len, to.clone());
                 } else {
                     if &p > from {
-                        new_op.path.decrease_index(base_operate_path.len());
+                        new_op.path.decrease_index(base_operate_path_len);
                     }
                     if p > to || (p == to && from > &to) {
-                        new_op.path.increase_index(base_operate_path.len());
+                        new_op.path.increase_index(base_operate_path_len);
                     }
                 }
             }

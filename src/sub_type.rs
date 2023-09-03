@@ -547,20 +547,25 @@ impl SubTypeFunctions for TextSubType {
     }
 
     fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Option<Value>> {
-        let p = sub_type_operand.get("p").unwrap().as_u64().unwrap() as usize;
+        let sub_operand: TextOperand = sub_type_operand.try_into()?;
+        let p = sub_operand.offset;
         if let Some(v) = val {
             match v {
                 Value::Null => {}
                 Value::String(s) => {
-                    if let Some(insert) = sub_type_operand.get("i") {
-                        return Ok(Some(Value::String(format!(
-                            "{}{}{}",
-                            &s[0..p],
-                            insert.as_str().unwrap(),
-                            &s[p..]
-                        ))));
+                    if let Some(insert) = sub_operand.get_insert() {
+                        if p <= s.len() {
+                            return Ok(Some(Value::String(format!(
+                                "{}{}{}",
+                                &s[0..p],
+                                insert,
+                                &s[p..]
+                            ))));
+                        } else {
+                            return Ok(Some(Value::String(format!("{}{}", s, insert))));
+                        }
                     } else {
-                        let to_delete = sub_type_operand.get("d").unwrap().as_str().unwrap();
+                        let to_delete = sub_operand.uncheck_get_delete();
                         let deleted = &s[p..to_delete.len()];
                         if !to_delete.eq(deleted) {
                             return Err(JsonError::InvalidOperation(format!(
@@ -568,11 +573,15 @@ impl SubTypeFunctions for TextSubType {
                             )));
                         }
 
-                        return Ok(Some(Value::String(format!(
-                            "{}{}",
-                            &s[0..p],
-                            &s[p + to_delete.len()..]
-                        ))));
+                        if p <= s.len() {
+                            return Ok(Some(Value::String(format!(
+                                "{}{}",
+                                &s[0..p],
+                                &s[p + to_delete.len()..]
+                            ))));
+                        } else {
+                            return Ok(Some(v.clone()));
+                        }
                     }
                 }
                 _ => {
