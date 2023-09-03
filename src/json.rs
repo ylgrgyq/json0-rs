@@ -121,19 +121,8 @@ impl Appliable for Value {
         match self {
             Value::Array(array) => array.apply(paths, op),
             Value::Object(obj) => obj.apply(paths, op),
-            Value::Number(n) => match op {
-                Operator::AddNumber(v) => {
-                    let new_v = n.as_u64().unwrap() + v.as_u64().unwrap();
-                    let serde_v = serde_json::to_value(new_v)?;
-                    _ = mem::replace(self, serde_v);
-                    Ok(())
-                }
-                _ => Err(JsonError::InvalidOperation(
-                    "Only AddNumber operation can apply to a Number JSON Value".into(),
-                )),
-            },
             _ => match op {
-                Operator::SubType2(_, op, f) => {
+                Operator::SubType(_, op, f) => {
                     if let Some(v) = f.apply(Some(self), &op)? {
                         _ = mem::replace(self, v);
                     }
@@ -154,7 +143,7 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
         let k = paths.first_key_path().ok_or(JsonError::BadPath)?;
         let target_value = self.get(k);
         match &op {
-            Operator::SubType2(_, op, f) => {
+            Operator::SubType(_, op, f) => {
                 if let Some(v) = f.apply(target_value, op)? {
                     self.insert(k.clone(), v);
                 }
@@ -196,23 +185,7 @@ impl Appliable for Vec<serde_json::Value> {
         let index = paths.first_index_path().ok_or(JsonError::BadPath)?;
         let target_value = self.get(*index);
         match op {
-            Operator::AddNumber(v) => {
-                if let Some(old_v) = target_value {
-                    match old_v {
-                        Value::Number(n) => {
-                            let new_v = n.as_u64().unwrap() + v.as_u64().unwrap();
-                            let serde_v = serde_json::to_value(new_v)?;
-                            self[*index] = serde_v;
-                            Ok(())
-                        }
-                        _ => Err(JsonError::BadPath),
-                    }
-                } else {
-                    self[*index] = v.clone();
-                    Ok(())
-                }
-            }
-            Operator::SubType2(_, op, f) => {
+            Operator::SubType(_, op, f) => {
                 if let Some(v) = f.apply(target_value, &op)? {
                     self[*index] = v;
                 }

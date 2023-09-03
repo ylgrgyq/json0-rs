@@ -12,10 +12,8 @@ use crate::sub_type::SubTypeFunctionsHolder;
 fn is_equivalent_to_noop(op: &OperationComponent) -> bool {
     match &op.operator {
         Operator::Noop() => true,
-        Operator::SubType(_, _) => false,
-        Operator::SubType2(_, _, _) => false,
-        Operator::AddNumber(_)
-        | Operator::ListInsert(_)
+        Operator::SubType(_, _, _) => false,
+        Operator::ListInsert(_)
         | Operator::ListDelete(_)
         | Operator::ObjectInsert(_)
         | Operator::ObjectDelete(_) => false,
@@ -172,8 +170,8 @@ impl Transformer {
         let same_operand = base_op.path.len() == new_op.path.len();
         let base_op_is_prefix = base_op.path.is_prefix_of(&new_op.path);
         match &base_op.operator {
-            Operator::SubType2(base_sub_type, base_op_operand, base_f) => {
-                if let Operator::SubType2(new_op_subtype, new_op_operand, _) = &new_op.operator {
+            Operator::SubType(base_sub_type, base_op_operand, base_f) => {
+                if let Operator::SubType(new_op_subtype, new_op_operand, _) = &new_op.operator {
                     if base_sub_type.eq(new_op_subtype) {
                         return base_f
                             .transform(new_op_operand, base_op_operand, side)?
@@ -181,7 +179,7 @@ impl Transformer {
                             .map(|new_operand| {
                                 OperationComponent::new(
                                     base_op.path.clone(),
-                                    Operator::SubType2(
+                                    Operator::SubType(
                                         base_sub_type.clone(),
                                         new_operand,
                                         base_f.box_clone(),

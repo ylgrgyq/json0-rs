@@ -134,13 +134,13 @@ impl SubTypeFunctions for NumberAddSubType {
     fn invert(&self, _: &Path, sub_type_operand: &Value) -> Result<Operator> {
         if let Value::Number(n) = sub_type_operand {
             if n.is_i64() {
-                Ok(Operator::SubType2(
+                Ok(Operator::SubType(
                     SubType::NumberAdd,
                     serde_json::to_value(-n.as_i64().unwrap()).unwrap(),
                     self.box_clone(),
                 ))
             } else if n.is_f64() {
-                Ok(Operator::SubType2(
+                Ok(Operator::SubType(
                     SubType::NumberAdd,
                     serde_json::to_value(-n.as_f64().unwrap()).unwrap(),
                     self.box_clone(),
@@ -161,17 +161,17 @@ impl SubTypeFunctions for NumberAddSubType {
 
     fn merge(&self, base_operand: &Value, other: &Operator) -> Option<Operator> {
         match &other {
-            Operator::SubType2(_, other_v, _) => {
+            Operator::SubType(_, other_v, _) => {
                 if base_operand.is_i64() && other_v.is_i64() {
                     let new_v = base_operand.as_i64().unwrap() + other_v.as_i64().unwrap();
-                    Some(Operator::SubType2(
+                    Some(Operator::SubType(
                         SubType::NumberAdd,
                         serde_json::to_value(new_v).unwrap(),
                         self.box_clone(),
                     ))
                 } else if base_operand.is_f64() || other_v.is_f64() {
                     let new_v = base_operand.as_f64().unwrap() + other_v.as_f64().unwrap();
-                    Some(Operator::SubType2(
+                    Some(Operator::SubType(
                         SubType::NumberAdd,
                         serde_json::to_value(new_v).unwrap(),
                         self.box_clone(),
@@ -407,13 +407,13 @@ impl SubTypeFunctions for TextSubType {
                         }
                     })
                     .collect::<Result<Vec<Value>>>()?;
-                Ok(Operator::SubType2(
+                Ok(Operator::SubType(
                     SubType::Text,
                     Value::Array(new_ops),
                     self.box_clone(),
                 ))
             }
-            Value::Object(op) => Ok(Operator::SubType2(
+            Value::Object(op) => Ok(Operator::SubType(
                 SubType::Text,
                 Value::Object(self.invert_object(op)?),
                 self.box_clone(),
@@ -427,7 +427,7 @@ impl SubTypeFunctions for TextSubType {
     }
 
     fn merge(&self, base: &Value, other: &Operator) -> Option<Operator> {
-        if let Operator::SubType2(sub_type, sub_type_operand, _) = other {
+        if let Operator::SubType(sub_type, sub_type_operand, _) = other {
             if SubType::Text.eq(sub_type) {
                 let base_i = base.get("i");
                 let other_i = sub_type_operand.get("i");
@@ -451,7 +451,7 @@ impl SubTypeFunctions for TextSubType {
                     m.insert("p".into(), serde_json::to_value(base_p).unwrap());
                     m.insert("i".into(), s);
 
-                    return Some(Operator::SubType2(
+                    return Some(Operator::SubType(
                         SubType::Text,
                         Value::Object(m),
                         self.box_clone(),
@@ -472,7 +472,7 @@ impl SubTypeFunctions for TextSubType {
                     m.insert("p".into(), serde_json::to_value(other_p).unwrap());
                     m.insert("d".into(), s);
 
-                    return Some(Operator::SubType2(
+                    return Some(Operator::SubType(
                         SubType::Text,
                         Value::Object(m),
                         self.box_clone(),

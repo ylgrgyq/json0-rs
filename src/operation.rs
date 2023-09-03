@@ -19,9 +19,7 @@ use crate::{
 
 pub enum Operator {
     Noop(),
-    SubType(SubType, Value),
-    SubType2(SubType, Value, Box<dyn SubTypeFunctions>),
-    AddNumber(Value),
+    SubType(SubType, Value, Box<dyn SubTypeFunctions>),
     ListInsert(Value),
     ListDelete(Value),
     // Replace value from last value to first value in json array.
@@ -41,11 +39,9 @@ impl Debug for Operator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Noop() => f.debug_tuple("Noop").finish(),
-            Self::SubType(arg0, arg1) => f.debug_tuple("SubType").field(arg0).field(arg1).finish(),
-            Self::SubType2(arg0, arg1, _) => {
+            Self::SubType(arg0, arg1, _) => {
                 f.debug_tuple("SubType2").field(arg0).field(arg1).finish()
             }
-            Self::AddNumber(arg0) => f.debug_tuple("AddNumber").field(arg0).finish(),
             Self::ListInsert(arg0) => f.debug_tuple("ListInsert").field(arg0).finish(),
             Self::ListDelete(arg0) => f.debug_tuple("ListDelete").field(arg0).finish(),
             Self::ListReplace(arg0, arg1) => f
@@ -68,9 +64,7 @@ impl Debug for Operator {
 impl PartialEq for Operator {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::SubType(l0, l1), Self::SubType(r0, r1)) => l0 == r0 && l1 == r1,
-            (Self::SubType2(l0, l1, _), Self::SubType2(r0, r1, _)) => l0 == r0 && l1 == r1,
-            (Self::AddNumber(l0), Self::AddNumber(r0)) => l0 == r0,
+            (Self::SubType(l0, l1, _), Self::SubType(r0, r1, _)) => l0 == r0 && l1 == r1,
             (Self::ListInsert(l0), Self::ListInsert(r0)) => l0 == r0,
             (Self::ListDelete(l0), Self::ListDelete(r0)) => l0 == r0,
             (Self::ListReplace(l0, l1), Self::ListReplace(r0, r1)) => l0 == r0 && l1 == r1,
@@ -87,11 +81,9 @@ impl Clone for Operator {
     fn clone(&self) -> Self {
         match self {
             Self::Noop() => Self::Noop(),
-            Self::SubType(arg0, arg1) => Self::SubType(arg0.clone(), arg1.clone()),
-            Self::SubType2(arg0, arg1, arg2) => {
-                Self::SubType2(arg0.clone(), arg1.clone(), arg2.clone())
+            Self::SubType(arg0, arg1, arg2) => {
+                Self::SubType(arg0.clone(), arg1.clone(), arg2.clone())
             }
-            Self::AddNumber(arg0) => Self::AddNumber(arg0.clone()),
             Self::ListInsert(arg0) => Self::ListInsert(arg0.clone()),
             Self::ListDelete(arg0) => Self::ListDelete(arg0.clone()),
             Self::ListReplace(arg0, arg1) => Self::ListReplace(arg0.clone(), arg1.clone()),
@@ -117,7 +109,7 @@ impl Operator {
 
 impl Validation for Operator {
     fn validates(&self) -> Result<()> {
-        if let Operator::SubType2(_, operand, f) = self {
+        if let Operator::SubType(_, operand, f) = self {
             return f.validate_operand(operand);
         }
         Ok(())
@@ -128,9 +120,7 @@ impl Display for Operator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s: String = match self {
             Operator::Noop() => "".into(),
-            Operator::SubType(t, o) => format!("t: {}, o: {}", t, o),
-            Operator::SubType2(t, o, _) => format!("t: {}, o: {}", t, o),
-            Operator::AddNumber(n) => format!("na: {}", n),
+            Operator::SubType(t, o, _) => format!("t: {}, o: {}", t, o),
             Operator::ListInsert(i) => format!("li: {}", i),
             Operator::ListDelete(d) => format!("ld: {}", d),
             Operator::ListReplace(i, d) => format!("li: {}, ld: {}", i, d),
@@ -188,11 +178,7 @@ impl OperationComponent {
         let mut path = self.path.clone();
         let operator = match &self.operator {
             Operator::Noop() => Operator::Noop(),
-            Operator::SubType(_, _) => todo!(),
-            Operator::SubType2(_, o, f) => f.invert(&path, o)?,
-            Operator::AddNumber(n) => {
-                Operator::AddNumber(serde_json::to_value(-n.as_i64().unwrap()).unwrap())
-            }
+            Operator::SubType(_, o, f) => f.invert(&path, o)?,
             Operator::ListInsert(v) => Operator::ListDelete(v.clone()),
             Operator::ListDelete(v) => Operator::ListInsert(v.clone()),
             Operator::ListReplace(new_v, old_v) => {
@@ -221,13 +207,7 @@ impl OperationComponent {
     pub fn merge(&mut self, op: OperationComponent) -> Option<OperationComponent> {
         if let Some(new_operator) = match &self.operator {
             Operator::Noop() => Some(op.operator.clone()),
-            Operator::AddNumber(v1) => match &op.operator {
-                Operator::AddNumber(v2) => Some(Operator::AddNumber(
-                    serde_json::to_value(v1.as_i64().unwrap() + v2.as_i64().unwrap()).unwrap(),
-                )),
-                _ => None,
-            },
-            Operator::SubType2(_, base_v, f) => f.merge(base_v, &op.operator),
+            Operator::SubType(_, base_v, f) => f.merge(base_v, &op.operator),
 
             Operator::ListInsert(v1) => match &op.operator {
                 Operator::ListDelete(v2) => {
@@ -312,27 +292,13 @@ impl OperationComponent {
 
     pub fn operate_path_len(&self) -> usize {
         match self.operator {
-            Operator::SubType2(_, _, _) | Operator::AddNumber(_) => self.path.clone().len(),
+            Operator::SubType(_, _, _) => self.path.clone().len(),
             _ => {
                 let mut p = self.path.clone();
                 p.get_mut_elements().pop();
                 p.len()
             }
         }
-    }
-
-    pub fn check_may_conflict_by_path(&self, common_path: &Path, op: &OperationComponent) -> bool {
-        let mut self_operate_path_len = self.path.len() - 1;
-        if let Operator::AddNumber(_) = self.operator {
-            self_operate_path_len += 1;
-        }
-
-        let mut op_operate_path_len = op.path.len() - 1;
-        if let Operator::AddNumber(_) = op.operator {
-            op_operate_path_len += 1;
-        }
-
-        common_path.len() >= self_operate_path_len || common_path.len() >= op_operate_path_len
     }
 }
 
@@ -626,13 +592,13 @@ impl NumberAddOperationBuilder {
             let o = serde_json::to_value(v).unwrap();
             OperationComponent::new(
                 self.path,
-                Operator::SubType2(SubType::NumberAdd, o, self.sub_type_function),
+                Operator::SubType(SubType::NumberAdd, o, self.sub_type_function),
             )
         } else if let Some(v) = self.number_f64 {
             let o = serde_json::to_value(v).unwrap();
             OperationComponent::new(
                 self.path,
-                Operator::SubType2(SubType::NumberAdd, o, self.sub_type_function),
+                Operator::SubType(SubType::NumberAdd, o, self.sub_type_function),
             )
         } else {
             return Err(JsonError::InvalidOperation("need a number to add".into()));
@@ -704,7 +670,7 @@ impl TextOperationBuilder {
         let o = Value::Object(op_map);
         OperationComponent::new(
             self.path,
-            Operator::SubType2(SubType::Text, o, self.sub_type_function),
+            Operator::SubType(SubType::Text, o, self.sub_type_function),
         )
     }
 }
@@ -743,7 +709,7 @@ impl SubTypeOperationBuilder {
     pub fn build(self) -> Result<OperationComponent> {
         if let Some(o) = self.sub_type_operator {
             if let Some(f) = self.sub_type_function {
-                OperationComponent::new(self.path, Operator::SubType2(self.sub_type, o, f))
+                OperationComponent::new(self.path, Operator::SubType(self.sub_type, o, f))
             } else {
                 Err(JsonError::InvalidOperation(
                     "sub type functions is required".into(),
@@ -852,7 +818,7 @@ impl OperationFactory {
     fn map_to_operator(&self, obj: &Map<String, Value>) -> Result<Operator> {
         if let Some(na) = obj.get("na") {
             self.validate_operation_object_size(obj, 2)?;
-            return Ok(Operator::SubType2(
+            return Ok(Operator::SubType(
                 SubType::NumberAdd,
                 na.clone(),
                 self.sub_type_holder
@@ -874,7 +840,7 @@ impl OperationFactory {
                     "no sub type functions for sub type: {}",
                     sub_type
                 )))?;
-            return Ok(Operator::SubType2(sub_type, op, sub_op_func));
+            return Ok(Operator::SubType(sub_type, op, sub_op_func));
         }
 
         if let Some(lm) = obj.get("lm") {
@@ -944,7 +910,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let Operator::SubType2(sub_type, op_value, _) = op.operator else {
+        let Operator::SubType(sub_type, op_value, _) = op.operator else {
             panic!()
         };
         assert_eq!(SubType::NumberAdd, sub_type);
@@ -962,7 +928,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let Operator::SubType2(sub_type, op_value, _) = op.operator else {
+        let Operator::SubType(sub_type, op_value, _) = op.operator else {
                 panic!()
             };
         assert_eq!(SubType::Text, sub_type);
