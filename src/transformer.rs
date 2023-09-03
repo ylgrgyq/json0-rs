@@ -28,6 +28,18 @@ fn is_equivalent_to_noop(op: &OperationComponent) -> bool {
     }
 }
 
+fn is_same_operand(op_a: &OperationComponent, op_b: &OperationComponent) -> bool {
+    if let Operator::SubType(_, _, _) = op_a.operator {
+        return false;
+    }
+
+    if let Operator::SubType(_, _, _) = op_b.operator {
+        return false;
+    }
+
+    op_a.path.len() == op_b.path.len()
+}
+
 #[derive(PartialEq)]
 pub enum TransformSide {
     LEFT,
@@ -167,7 +179,7 @@ impl Transformer {
         // [p1,p2,p4], [p1,p2,p3]. same operand
         // [p1,p2,p3,p4,..], [p1,p2,p3], base_op is prefix of new_op
         // [p1,p2,p4,p5,..], [p1,p2,p3]
-        let same_operand = base_op.path.len() == new_op.path.len();
+        let same_operand = is_same_operand(base_op, &new_op);
         let base_op_is_prefix = base_op.path.is_prefix_of(&new_op.path);
         match &base_op.operator {
             Operator::SubType(base_sub_type, base_op_operand, base_f) => {
@@ -242,6 +254,7 @@ impl Transformer {
                 }
             }
             Operator::ListDelete(_) => {
+                info!("ssd {} {} {}", base_op, new_op, base_operate_path_len);
                 let base_op_operate_path = base_op.path.get(base_operate_path_len).unwrap();
                 let new_op_operate_path = new_op.path.get(base_operate_path_len).unwrap();
                 if let Operator::ListMove(lm) = new_op.operator {
