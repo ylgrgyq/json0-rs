@@ -349,24 +349,18 @@ impl TryFrom<&Value> for TextOperand {
 struct TextSubType {}
 
 impl TextSubType {
-    fn invert_object(&self, op: &serde_json::Map<String, Value>) -> Result<Map<String, Value>> {
-        let mut new_op: Map<String, Value> = serde_json::Map::new();
-        if let Some(p) = op.get("p") {
-            new_op.insert("p".into(), p.clone());
-        }
-
-        if let Some(i) = op.get("i") {
-            new_op.insert("d".into(), i.clone());
-        } else if let Some(d) = op.get("d") {
-            new_op.insert("i".into(), d.clone());
+    fn invert_object(&self, op: &TextOperand) -> Result<TextOperand> {
+        if let Some(i) = op.get_insert() {
+            return Ok(TextOperand::new_delete(op.offset, i.clone()));
+        } else if let Some(d) = op.get_delete() {
+            return Ok(TextOperand::new_insert(op.offset, d.clone()));
         } else {
             return Err(JsonError::InvalidOperation(format!(
                 "invalid sub type operand:\"{}\" for TextSubType",
-                Value::Object(op.clone())
+                op.to_value()
             ))
             .into());
         }
-        Ok(new_op)
     }
 
     fn transform_position(&self, pos: usize, op: &TextOperand, insert_after: bool) -> usize {
@@ -395,86 +389,53 @@ impl SubTypeFunctions for TextSubType {
     }
 
     fn invert(&self, _: &Path, sub_type_operand: &Value) -> Result<Operator> {
-        match sub_type_operand {
-            Value::Array(ops) => {
-                let new_ops = ops
-                    .iter()
-                    .map(|op| {
-                        if let Value::Object(o) = op {
-                            Ok(Value::Object(self.invert_object(o)?))
-                        } else {
-                            Err(JsonError::BadPath)
-                        }
-                    })
-                    .collect::<Result<Vec<Value>>>()?;
-                Ok(Operator::SubType(
-                    SubType::Text,
-                    Value::Array(new_ops),
-                    self.box_clone(),
-                ))
-            }
-            Value::Object(op) => Ok(Operator::SubType(
-                SubType::Text,
-                Value::Object(self.invert_object(op)?),
-                self.box_clone(),
-            )),
-            _ => Err(JsonError::InvalidOperation(format!(
-                "invalid sub type operand:\"{}\" for TextSubType",
-                sub_type_operand
-            ))
-            .into()),
-        }
+        let s: TextOperand = sub_type_operand.try_into()?;
+        Ok(Operator::SubType(
+            SubType::Text,
+            self.invert_object(&s)?.to_value(),
+            self.box_clone(),
+        ))
     }
 
     fn merge(&self, base: &Value, other: &Operator) -> Option<Operator> {
         if let Operator::SubType(sub_type, sub_type_operand, _) = other {
             if SubType::Text.eq(sub_type) {
-                let base_i = base.get("i");
-                let other_i = sub_type_operand.get("i");
-                let base_p = base.get("p").unwrap().as_u64().unwrap() as usize;
-                let other_p = sub_type_operand.get("p").unwrap().as_u64().unwrap() as usize;
-                let base_d = base.get("d");
-                let other_d = sub_type_operand.get("d");
+                let base_op: TextOperand = base.try_into().ok()?;
+                let other_op: TextOperand = sub_type_operand.try_into().ok()?;
 
-                if base_i.is_some()
-                    && other_i.is_some()
-                    && base_p <= other_p
-                    && other_p <= base_p + base_i.unwrap().as_str().unwrap().len()
+                if base_op.is_insert()
+                    && other_op.is_insert()
+                    && base_op <= other_op
+                    && other_op.offset <= base_op.offset + base_op.uncheck_get_insert().len()
                 {
-                    let s = Value::String(format!(
+                    let s = format!(
                         "{}{}{}",
-                        &base_i.unwrap().as_str().unwrap()[0..other_p - base_p],
-                        &other_i.unwrap().as_str().unwrap(),
-                        &base_i.unwrap().as_str().unwrap()[other_p - base_p..],
-                    ));
-                    let mut m = Map::new();
-                    m.insert("p".into(), serde_json::to_value(base_p).unwrap());
-                    m.insert("i".into(), s);
+                        &base_op.uncheck_get_insert()[0..other_op.offset - base_op.offset],
+                        &other_op.uncheck_get_insert(),
+                        &base_op.uncheck_get_insert()[other_op.offset - base_op.offset..],
+                    );
 
                     return Some(Operator::SubType(
                         SubType::Text,
-                        Value::Object(m),
+                        TextOperand::new_insert(base_op.offset, s).to_value(),
                         self.box_clone(),
                     ));
                 }
-                if base_d.is_some()
-                    && other_d.is_some()
-                    && other_p <= base_p
-                    && base_p <= other_p + other_d.unwrap().as_str().unwrap().len()
+                if base_op.is_delete()
+                    && other_op.is_delete()
+                    && other_op <= base_op
+                    && base_op.offset <= other_op.offset + other_op.uncheck_get_delete().len()
                 {
-                    let s = Value::String(format!(
+                    let s = format!(
                         "{}{}{}",
-                        &other_d.unwrap().as_str().unwrap()[0..base_p - other_p],
-                        &base_d.unwrap().as_str().unwrap(),
-                        &other_d.unwrap().as_str().unwrap()[base_p - other_p..],
-                    ));
-                    let mut m = Map::new();
-                    m.insert("p".into(), serde_json::to_value(other_p).unwrap());
-                    m.insert("d".into(), s);
+                        &other_op.uncheck_get_delete()[0..base_op.offset - other_op.offset],
+                        &base_op.uncheck_get_delete(),
+                        &other_op.uncheck_get_delete()[base_op.offset - other_op.offset..],
+                    );
 
                     return Some(Operator::SubType(
                         SubType::Text,
-                        Value::Object(m),
+                        TextOperand::new_delete(other_op.offset, s).to_value(),
                         self.box_clone(),
                     ));
                 }

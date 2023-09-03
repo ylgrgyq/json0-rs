@@ -254,7 +254,6 @@ impl Transformer {
                 }
             }
             Operator::ListDelete(_) => {
-                info!("ssd {} {} {}", base_op, new_op, base_operate_path_len);
                 let base_op_operate_path = base_op.path.get(base_operate_path_len).unwrap();
                 let new_op_operate_path = new_op.path.get(base_operate_path_len).unwrap();
                 if let Operator::ListMove(lm) = new_op.operator {
