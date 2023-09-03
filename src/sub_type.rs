@@ -308,18 +308,16 @@ impl TryFrom<&Value> for TextOperand {
 
         if let Some(insert) = val.get("i") {
             if val.get("d").is_some() {
-                return Err(JsonError::InvalidOperation(
-                    format!(
-                        "invalid text operand: {}, insert and delete at the same time",
-                        val
-                    )
-                    .into(),
-                ));
+                return Err(JsonError::InvalidOperation(format!(
+                    "invalid text operand: {}, insert and delete at the same time",
+                    val
+                )));
             }
             if !insert.is_string() {
-                return Err(JsonError::InvalidOperation(
-                    format!("text insert non-string value: {}", insert).into(),
-                ));
+                return Err(JsonError::InvalidOperation(format!(
+                    "text insert non-string value: {}",
+                    insert
+                )));
             }
             return Ok(TextOperand {
                 offset,
@@ -330,9 +328,10 @@ impl TryFrom<&Value> for TextOperand {
 
         if let Some(delete) = val.get("d") {
             if !delete.is_string() {
-                return Err(JsonError::InvalidOperation(
-                    format!("text delete non-string value: {}", delete).into(),
-                ));
+                return Err(JsonError::InvalidOperation(format!(
+                    "text delete non-string value: {}",
+                    delete
+                )));
             }
             return Ok(TextOperand {
                 offset,
@@ -340,9 +339,10 @@ impl TryFrom<&Value> for TextOperand {
                 delete: Some(delete.as_str().unwrap().into()),
             });
         }
-        Err(JsonError::InvalidOperation(
-            format!("invalid text operand: {}", val).into(),
-        ))
+        Err(JsonError::InvalidOperation(format!(
+            "invalid text operand: {}",
+            val
+        )))
     }
 }
 
@@ -351,15 +351,14 @@ struct TextSubType {}
 impl TextSubType {
     fn invert_object(&self, op: &TextOperand) -> Result<TextOperand> {
         if let Some(i) = op.get_insert() {
-            return Ok(TextOperand::new_delete(op.offset, i.clone()));
+            Ok(TextOperand::new_delete(op.offset, i.clone()))
         } else if let Some(d) = op.get_delete() {
-            return Ok(TextOperand::new_insert(op.offset, d.clone()));
+            Ok(TextOperand::new_insert(op.offset, d.clone()))
         } else {
-            return Err(JsonError::InvalidOperation(format!(
+            Err(JsonError::InvalidOperation(format!(
                 "invalid sub type operand:\"{}\" for TextSubType",
                 op.to_value()
-            ))
-            .into());
+            )))
         }
     }
 
@@ -367,18 +366,16 @@ impl TextSubType {
         let p = op.offset;
         if let Some(i) = &op.insert {
             if p < pos || (p == pos && insert_after) {
-                return pos + i.len();
+                pos + i.len()
             } else {
-                return pos;
+                pos
             }
+        } else if pos <= p {
+            pos
+        } else if pos <= p + op.delete.as_ref().unwrap().len() {
+            p
         } else {
-            if pos <= p {
-                return pos;
-            } else if pos <= p + op.delete.as_ref().unwrap().len() {
-                return p;
-            } else {
-                return pos - op.delete.as_ref().unwrap().len();
-            }
+            pos - op.delete.as_ref().unwrap().len()
         }
     }
 }
@@ -473,7 +470,7 @@ impl SubTypeFunctions for TextSubType {
                 }
                 if !d_str.is_empty() {
                     ops.push(
-                        TextOperand::new_delete(new_operand.offset + base_i.len(), d_str.into())
+                        TextOperand::new_delete(new_operand.offset + base_i.len(), d_str)
                             .to_value(),
                     );
                 }
@@ -529,9 +526,9 @@ impl SubTypeFunctions for TextSubType {
                         let to_delete = sub_operand.uncheck_get_delete();
                         let deleted = &s[p..to_delete.len()];
                         if !to_delete.eq(deleted) {
-                            return Err(JsonError::InvalidOperation(format!(
-                                "text to delete in text operation is not match target text"
-                            )));
+                            return Err(JsonError::InvalidOperation(
+                                "text to delete in text operation is not match target text".into(),
+                            ));
                         }
 
                         if p <= s.len() {
@@ -557,7 +554,7 @@ impl SubTypeFunctions for TextSubType {
         if let Some(insert) = sub_type_operand.get("i") {
             return Ok(Some(insert.clone()));
         }
-        return Ok(None);
+        Ok(None)
     }
 
     fn validate_operand(&self, val: &Value) -> Result<()> {
@@ -570,17 +567,19 @@ impl SubTypeFunctions for TextSubType {
 
         if let Some(insert) = val.get("i") {
             if !insert.is_string() {
-                return Err(JsonError::InvalidOperation(
-                    format!("text insert non-string value: {}", insert).into(),
-                ));
+                return Err(JsonError::InvalidOperation(format!(
+                    "text insert non-string value: {}",
+                    insert
+                )));
             }
         }
 
         if let Some(delete) = val.get("d") {
             if !delete.is_string() {
-                return Err(JsonError::InvalidOperation(
-                    format!("text delete non-string value: {}", delete).into(),
-                ));
+                return Err(JsonError::InvalidOperation(format!(
+                    "text delete non-string value: {}",
+                    delete
+                )));
             }
         }
         Ok(())

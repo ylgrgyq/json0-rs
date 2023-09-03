@@ -44,13 +44,11 @@ pub enum TransformSide {
     RIGHT,
 }
 
-pub struct Transformer {
-    sub_type_holder: Rc<SubTypeFunctionsHolder>,
-}
+pub struct Transformer {}
 
 impl Transformer {
-    pub fn new(sub_type_holder: Rc<SubTypeFunctionsHolder>) -> Transformer {
-        Transformer { sub_type_holder }
+    pub fn new(_: Rc<SubTypeFunctionsHolder>) -> Transformer {
+        Transformer {}
     }
 
     pub fn transform(

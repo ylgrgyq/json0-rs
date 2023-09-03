@@ -1,8 +1,8 @@
 use itertools::Itertools;
+use json0_rs::error::{JsonError, Result};
+use json0_rs::operation::Operation;
+use json0_rs::Json0;
 use log::{debug, info};
-use my_json0::error::{JsonError, Result};
-use my_json0::operation::Operation;
-use my_json0::Json0;
 use serde_json::Value;
 use std::fmt::Display;
 use std::fs::File;
@@ -231,7 +231,7 @@ struct InvertOperationExecutor {
 }
 
 impl Test<InvertOperationExecutor> for InvertOperationTest {
-    fn test(&self, executor: &InvertOperationExecutor) {
+    fn test(&self, _: &InvertOperationExecutor) {
         assert_eq!(
             *self.expect_invert_op.get(0).unwrap(),
             self.origin_op.get(0).unwrap().invert().unwrap(),

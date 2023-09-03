@@ -561,7 +561,10 @@ pub struct NumberAddOperationBuilder {
 }
 
 impl NumberAddOperationBuilder {
-    fn new(path: Path, sub_type_function: Box<dyn SubTypeFunctions>) -> NumberAddOperationBuilder {
+    pub fn new(
+        path: Path,
+        sub_type_function: Box<dyn SubTypeFunctions>,
+    ) -> NumberAddOperationBuilder {
         NumberAddOperationBuilder {
             path,
             number_i64: None,
@@ -570,17 +573,17 @@ impl NumberAddOperationBuilder {
         }
     }
 
-    fn add_int(mut self, num: i64) -> Self {
+    pub fn add_int(mut self, num: i64) -> Self {
         self.number_i64 = Some(num);
         self
     }
 
-    fn add_float(mut self, num: f64) -> Self {
+    pub fn add_float(mut self, num: f64) -> Self {
         self.number_f64 = Some(num);
         self
     }
 
-    fn build(self) -> Result<OperationComponent> {
+    pub fn build(self) -> Result<OperationComponent> {
         // support insert/delete multipul numbers
         if self.number_f64.is_some() && self.number_i64.is_some() {
             return Err(JsonError::InvalidOperation(
@@ -615,7 +618,7 @@ pub struct TextOperationBuilder {
 }
 
 impl TextOperationBuilder {
-    fn new(path: Path, sub_type_function: Box<dyn SubTypeFunctions>) -> TextOperationBuilder {
+    pub fn new(path: Path, sub_type_function: Box<dyn SubTypeFunctions>) -> TextOperationBuilder {
         TextOperationBuilder {
             path,
             offset: 0,
@@ -625,31 +628,31 @@ impl TextOperationBuilder {
         }
     }
 
-    fn insert_string(mut self, offset: usize, insert: String) -> Self {
+    pub fn insert_string(mut self, offset: usize, insert: String) -> Self {
         self.insert_val = Some(insert);
         self.offset = offset;
         self
     }
 
-    fn insert_str(mut self, offset: usize, insert: &str) -> Self {
+    pub fn insert_str(mut self, offset: usize, insert: &str) -> Self {
         self.insert_val = Some(insert.into());
         self.offset = offset;
         self
     }
 
-    fn delete_string(mut self, offset: usize, delete: String) -> Self {
+    pub fn delete_string(mut self, offset: usize, delete: String) -> Self {
         self.delete_val = Some(delete);
         self.offset = offset;
         self
     }
 
-    fn delete_str(mut self, offset: usize, delete: &str) -> Self {
+    pub fn delete_str(mut self, offset: usize, delete: &str) -> Self {
         self.delete_val = Some(delete.into());
         self.offset = offset;
         self
     }
 
-    fn build(self) -> Result<OperationComponent> {
+    pub fn build(self) -> Result<OperationComponent> {
         // support insert/delete multipul strings
         if self.insert_val.is_none() && self.delete_val.is_none()
             || (self.insert_val.is_some() && self.delete_val.is_some())
