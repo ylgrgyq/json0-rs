@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use error::Result;
+use error::JsonError;
 use json::{Appliable, Routable};
 use operation::{Operation, OperationFactory};
 use path::Path;
@@ -19,6 +19,8 @@ mod transformer;
 #[cfg(test)]
 #[macro_use]
 extern crate assert_matches;
+
+pub type Result<T> = std::result::Result<T, JsonError>;
 
 pub struct Json0 {
     functions: Rc<SubTypeFunctionsHolder>,

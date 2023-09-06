@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+#[error("{}")]
 pub enum JsonError {
     #[error("Unexpected error: {0}")]
     UnexpectedError(String),
@@ -8,13 +9,13 @@ pub enum JsonError {
     InvalidParameter(String, String),
     #[error("Invalid operation: \"{0}\"")]
     InvalidOperation(String),
-    /// Path must holding path elements (number or key) splited by ',' and all of the
+    /// Path in JSON operation must holding path elements (number or key) splited by ',' and all of the
     /// elements must be surrounded with '[' and ']', eg: ['key1', 2, 'key2'].
     /// If not, this error will be returned
     #[error("Invalid path format")]
     InvalidPathFormat,
-    /// Path elements can only be number or key. If not, this error will be returned
-    /// This error is simillar with InvalidPathFormat, but this error emphasize on
+    /// Path elements in JSON operation can only be number or key. If not, this error will be returned
+    /// This error is simillar with InvalidPathFormat, but it emphasize on
     /// the validation of each path element not the whole path.
     #[error("Invalid path element: {0}")]
     InvalidPathElement(String),

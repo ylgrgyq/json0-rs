@@ -147,14 +147,12 @@ impl SubTypeFunctions for NumberAddSubType {
                 ))
             } else {
                 Err(JsonError::InvalidOperation(format!(
-                    "invalid number value:\"{}\" in NumberAdd sub type operand",
-                    sub_type_operand
+                    "invalid number value:\"{sub_type_operand}\" in NumberAdd sub type operand",
                 )))
             }
         } else {
             Err(JsonError::InvalidOperation(format!(
-                "invalid operand:\"{}\" for NumberAdd sub type",
-                sub_type_operand
+                "invalid operand:\"{sub_type_operand}\" for NumberAdd sub type",
             )))
         }
     }

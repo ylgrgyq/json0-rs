@@ -12,7 +12,7 @@ name = "integration"
 itertools = "0.11.0"
 serde_json = "1.0.96"
 serde = "1.0.164"
-thiserror = "1.0.38"
+thiserror = "1.0.48"
 dashmap = "5.4.0"
 log = "0.4.17"
 

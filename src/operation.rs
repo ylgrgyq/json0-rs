@@ -735,6 +735,7 @@ impl OperationFactory {
         OperationFactory { sub_type_holder }
     }
 
+    /// Build an Operation by JSON Value
     pub fn from_value(&self, value: Value) -> Result<Operation> {
         let mut operations = vec![];
         match value {
