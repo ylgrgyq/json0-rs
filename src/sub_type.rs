@@ -7,6 +7,7 @@ use dashmap::DashMap;
 use serde_json::{Map, Value};
 
 use crate::error::{JsonError, Result};
+use crate::json::ApplyResult;
 use crate::operation::Operator;
 use crate::path::Path;
 use crate::transformer::TransformSide;
@@ -23,7 +24,7 @@ pub trait SubTypeFunctions {
 
     fn transform(&self, new: &Value, base: &Value, side: TransformSide) -> Result<Vec<Value>>;
 
-    fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Option<Value>>;
+    fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> ApplyResult<Option<Value>>;
 
     fn validate_operand(&self, val: &Value) -> Result<()>;
 }

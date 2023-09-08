@@ -6,6 +6,7 @@ use crate::error::{JsonError, Result};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PathElement {
+    Empty,
     Index(usize),
     Key(String),
 }
@@ -16,10 +17,10 @@ impl PartialOrd for PathElement {
             // only index can compare
             PathElement::Index(a) => match other {
                 PathElement::Index(b) => a.partial_cmp(b),
-                PathElement::Key(_) => None,
+                PathElement::Empty | PathElement::Key(_) => None,
             },
             PathElement::Key(a) => match other {
-                PathElement::Index(_) => None,
+                PathElement::Empty | PathElement::Index(_) => None,
                 PathElement::Key(b) => {
                     if a == b {
                         Some(Ordering::Equal)
@@ -28,6 +29,7 @@ impl PartialOrd for PathElement {
                     }
                 }
             },
+            PathElement::Empty => None,
         }
     }
 }
@@ -49,6 +51,7 @@ impl Display for PathElement {
         match self {
             PathElement::Index(i) => f.write_fmt(format_args!("{}", i)),
             PathElement::Key(k) => f.write_fmt(format_args!("\"{}\"", k)),
+            PathElement::Empty => f.write_str("\"\""),
         }
     }
 }
@@ -83,7 +86,7 @@ impl Path {
         let first_path = self.paths.get(index)?;
 
         match first_path {
-            PathElement::Index(_) => None,
+            PathElement::Empty | PathElement::Index(_) => None,
             PathElement::Key(k) => Some(k),
         }
     }
@@ -93,7 +96,7 @@ impl Path {
 
         match first_path {
             PathElement::Index(i) => Some(i),
-            PathElement::Key(_) => None,
+            PathElement::Empty | PathElement::Key(_) => None,
         }
     }
 

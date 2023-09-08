@@ -1,25 +1,50 @@
 use std::mem;
+use thiserror::Error;
 
 use crate::{
-    error::{JsonError, Result},
+    error::JsonError,
     operation::Operator,
-    path::Path,
+    path::{Path, PathElement},
 };
 
 use serde_json::Value;
 
-pub trait Routable {
-    fn route_get(&self, paths: &Path) -> Result<Option<&Value>>;
+#[derive(Error, Debug)]
+#[error("{}")]
+pub enum RouteError {
+    #[error("Reach leaf node in json, but still has path: {0} remain")]
+    ReachLeafNode(Path),
+    #[error("Expect Key path type, but actually is {actual}")]
+    ExpectKeyPath { actual: PathElement },
+    #[error("Expect Index path type, but actually is {actual}")]
+    ExpectIndexPath { actual: PathElement },
+}
 
-    fn route_get_mut(&mut self, paths: &Path) -> Result<Option<&mut Value>>;
+pub type RouteResult<T> = std::result::Result<T, RouteError>;
+
+#[derive(Error, Debug)]
+#[error("{}")]
+pub enum ApplyError {
+    #[error("Reach leaf node in json, but still has path: {0} remain")]
+    RouteError(RouteError),
+    #[error("Can't apply operator: {operator} on value: {value}")]
+    InvalidApplyTarget { operator: Operator, value: Value },
+}
+
+pub type ApplyResult<T> = std::result::Result<T, ApplyError>;
+
+pub trait Routable {
+    fn route_get(&self, paths: &Path) -> RouteResult<Option<&Value>>;
+
+    fn route_get_mut(&mut self, paths: &Path) -> RouteResult<Option<&mut Value>>;
 }
 
 pub trait Appliable {
-    fn apply(&mut self, paths: Path, operator: Operator) -> Result<()>;
+    fn apply(&mut self, paths: Path, operator: Operator) -> ApplyResult<()>;
 }
 
 impl Routable for Value {
-    fn route_get(&self, paths: &Path) -> Result<Option<&Value>> {
+    fn route_get(&self, paths: &Path) -> RouteResult<Option<&Value>> {
         match self {
             Value::Array(array) => array.route_get(paths),
             Value::Object(obj) => obj.route_get(paths),
@@ -28,13 +53,13 @@ impl Routable for Value {
                 if paths.is_empty() {
                     Ok(Some(self))
                 } else {
-                    Err(JsonError::BadPath)
+                    Err(RouteError::ReachLeafNode(paths.clone()))
                 }
             }
         }
     }
 
-    fn route_get_mut(&mut self, paths: &Path) -> Result<Option<&mut Value>> {
+    fn route_get_mut(&mut self, paths: &Path) -> RouteResult<Option<&mut Value>> {
         match self {
             Value::Array(array) => array.route_get_mut(paths),
             Value::Object(obj) => obj.route_get_mut(paths),
@@ -42,7 +67,7 @@ impl Routable for Value {
                 if paths.is_empty() {
                     Ok(Some(self))
                 } else {
-                    Err(JsonError::BadPath)
+                    Err(RouteError::ReachLeafNode(paths.clone()))
                 }
             }
         }
@@ -50,8 +75,13 @@ impl Routable for Value {
 }
 
 impl Routable for serde_json::Map<String, serde_json::Value> {
-    fn route_get(&self, paths: &Path) -> Result<Option<&Value>> {
-        let k = paths.first_key_path().ok_or(JsonError::BadPath)?;
+    fn route_get(&self, paths: &Path) -> RouteResult<Option<&Value>> {
+        let k = paths.first_key_path().ok_or(RouteError::ExpectKeyPath {
+            actual: paths
+                .get(0)
+                .map(|v| v.clone())
+                .unwrap_or(PathElement::Empty),
+        })?;
         if let Some(v) = self.get(k) {
             let next_level = paths.next_level();
             if next_level.is_empty() {
@@ -64,8 +94,13 @@ impl Routable for serde_json::Map<String, serde_json::Value> {
         }
     }
 
-    fn route_get_mut(&mut self, paths: &Path) -> Result<Option<&mut Value>> {
-        let k = paths.first_key_path().ok_or(JsonError::BadPath)?;
+    fn route_get_mut(&mut self, paths: &Path) -> RouteResult<Option<&mut Value>> {
+        let k = paths.first_key_path().ok_or(RouteError::ExpectKeyPath {
+            actual: paths
+                .get(0)
+                .map(|v| v.clone())
+                .unwrap_or(PathElement::Empty),
+        })?;
         if let Some(v) = self.get_mut(k) {
             let next_level = paths.next_level();
             if next_level.is_empty() {
@@ -80,8 +115,13 @@ impl Routable for serde_json::Map<String, serde_json::Value> {
 }
 
 impl Routable for Vec<serde_json::Value> {
-    fn route_get(&self, paths: &Path) -> Result<Option<&Value>> {
-        let i = paths.first_index_path().ok_or(JsonError::BadPath)?;
+    fn route_get(&self, paths: &Path) -> RouteResult<Option<&Value>> {
+        let i = paths.first_index_path().ok_or(RouteError::ExpectKeyPath {
+            actual: paths
+                .get(0)
+                .map(|v| v.clone())
+                .unwrap_or(PathElement::Empty),
+        })?;
         if let Some(v) = self.get(*i) {
             let next_level = paths.next_level();
             if next_level.is_empty() {
@@ -94,8 +134,15 @@ impl Routable for Vec<serde_json::Value> {
         }
     }
 
-    fn route_get_mut(&mut self, paths: &Path) -> Result<Option<&mut Value>> {
-        let i = paths.first_index_path().ok_or(JsonError::BadPath)?;
+    fn route_get_mut(&mut self, paths: &Path) -> RouteResult<Option<&mut Value>> {
+        let i = paths
+            .first_index_path()
+            .ok_or(RouteError::ExpectIndexPath {
+                actual: paths
+                    .get(0)
+                    .map(|v| v.clone())
+                    .unwrap_or(PathElement::Empty),
+            })?;
         if let Some(v) = self.get_mut(*i) {
             let next_level = paths.next_level();
             if next_level.is_empty() {
@@ -110,12 +157,13 @@ impl Routable for Vec<serde_json::Value> {
 }
 
 impl Appliable for Value {
-    fn apply(&mut self, paths: Path, op: Operator) -> Result<()> {
+    fn apply(&mut self, paths: Path, op: Operator) -> ApplyResult<()> {
         if paths.len() > 1 {
             let (left, right) = paths.split_at(paths.len() - 1);
             return self
-                .route_get_mut(&left)?
-                .ok_or(JsonError::BadPath)?
+                .route_get_mut(&left)
+                .map_err(|e| ApplyError::RouteError(e))?
+                .ok_or(ApplyError::RouteError(RouteError::ReachLeafNode(paths)))?
                 .apply(right, op);
         }
         match self {
@@ -128,16 +176,17 @@ impl Appliable for Value {
                     }
                     Ok(())
                 }
-                _ => Err(JsonError::InvalidOperation(
-                    "Operation can only apply on array or object".into(),
-                )),
+                _ => Err(ApplyError::InvalidApplyTarget {
+                    operator: op,
+                    value: self.clone(),
+                }),
             },
         }
     }
 }
 
 impl Appliable for serde_json::Map<String, serde_json::Value> {
-    fn apply(&mut self, paths: Path, op: Operator) -> Result<()> {
+    fn apply(&mut self, paths: Path, op: Operator) -> ApplyResult<()> {
         assert!(paths.len() == 1);
 
         let k = paths.first_key_path().ok_or(JsonError::BadPath)?;
@@ -179,7 +228,7 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
 }
 
 impl Appliable for Vec<serde_json::Value> {
-    fn apply(&mut self, paths: Path, op: Operator) -> Result<()> {
+    fn apply(&mut self, paths: Path, op: Operator) -> ApplyResult<()> {
         assert!(paths.len() == 1);
 
         let index = paths.first_index_path().ok_or(JsonError::BadPath)?;
