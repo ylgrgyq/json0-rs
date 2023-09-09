@@ -6,9 +6,6 @@ use std::{
     vec,
 };
 
-use itertools::Itertools;
-use serde_json::{Map, Value};
-
 use crate::{
     common::Validation,
     error::JsonError,
@@ -16,6 +13,8 @@ use crate::{
     path::{Path, PathElement},
     sub_type::{SubType, SubTypeFunctions, SubTypeFunctionsHolder},
 };
+use itertools::Itertools;
+use serde_json::{Map, Value};
 
 pub enum Operator {
     Noop(),
@@ -109,10 +108,10 @@ impl Operator {
 
 impl Validation for Operator {
     fn validates(&self) -> Result<()> {
-        if let Operator::SubType(_, operand, f) = self {
-            return f.validate_operand(operand);
-        }
-        Ok(())
+        return match self {
+            Operator::SubType(_, operand, f) => f.validate_operand(operand),
+            _ => Ok(()),
+        };
     }
 }
 
@@ -189,7 +188,9 @@ impl OperationComponent {
                 if let Some(PathElement::Index(i)) = old_p {
                     Operator::ListMove(i)
                 } else {
-                    return Err(JsonError::BadPath);
+                    panic!(
+                        "invalid lm operation: {self}, last path in operation is not index path type"
+                    );
                 }
             }
             Operator::ObjectInsert(v) => Operator::ObjectDelete(v.clone()),

@@ -9,12 +9,12 @@ pub enum JsonError {
     RouteError(#[from] RouteError),
     #[error("{0}")]
     ApplyOperationError(#[from] ApplyOperationError),
+    #[error("Invalid operation: \"{0}\"")]
+    InvalidOperation(String),
     #[error("Unexpected error: {0}")]
     UnexpectedError(String),
     #[error("The parameter: \"{0}\" is invalid for reason: {1}")]
     InvalidParameter(String, String),
-    #[error("Invalid operation: \"{0}\"")]
-    InvalidOperation(String),
     /// Path in JSON operation must holding path elements (number or key) splited by ',' and all of the
     /// elements must be surrounded with '[' and ']', eg: ['key1', 2, 'key2'].
     /// If not, this error will be returned

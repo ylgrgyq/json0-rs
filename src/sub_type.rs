@@ -4,7 +4,6 @@ use std::vec;
 
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
-use itertools::Itertools;
 use serde_json::{Map, Value};
 
 use crate::error::{JsonError, Result};
