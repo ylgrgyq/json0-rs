@@ -2,7 +2,6 @@ use std::mem;
 use thiserror::Error;
 
 use crate::{
-    error::JsonError,
     operation::Operator,
     path::{Path, PathElement},
 };
@@ -14,24 +13,48 @@ use serde_json::Value;
 pub enum RouteError {
     #[error("Reach leaf node in json, but still has path: {0} remain")]
     ReachLeafNode(Path),
-    #[error("Expect Key path type, but actually is {actual}")]
-    ExpectKeyPath { actual: PathElement },
-    #[error("Expect Index path type, but actually is {actual}")]
-    ExpectIndexPath { actual: PathElement },
+    #[error("Expect key path type to route into {json_value}, but next path is {next_path}")]
+    ExpectKeyPath {
+        json_value: Value,
+        next_path: PathElement,
+    },
+    #[error("Expect index path type to route into {json_value}, but next path is {next_path}")]
+    ExpectIndexPath {
+        json_value: Value,
+        next_path: PathElement,
+    },
 }
 
 pub type RouteResult<T> = std::result::Result<T, RouteError>;
 
 #[derive(Error, Debug)]
 #[error("{}")]
-pub enum ApplyError {
-    #[error("Reach leaf node in json, but still has path: {0} remain")]
-    RouteError(RouteError),
-    #[error("Can't apply operator: {operator} on value: {value}")]
-    InvalidApplyTarget { operator: Operator, value: Value },
+pub enum ApplyOperationError {
+    #[error("{0}")]
+    RouteError(#[from] RouteError),
+    #[error("Can not apply operator: {operator} on value: {target_value}, reason: \"{reason}\"")]
+    InvalidApplyTarget {
+        operator: Operator,
+        target_value: Value,
+        reason: String,
+    },
+    #[error("Can not apply subtype operation: {{type: {subtype_name}, operand: {subtype_operand}}} on value: {target_value}, reason: \"{reason}\"")]
+    InvalidApplySubtypeOperationTarget {
+        subtype_name: String,
+        target_value: Value,
+        subtype_operand: Value,
+        reason: String,
+    },
+    #[error("Invalid subtype operator: {{type: {subtype_name}, operand: {subtype_operand}}}, can not apply it on value: {target_value}, reason: \"{reason}\"")]
+    InvalidSubtypeOperator {
+        subtype_name: String,
+        subtype_operand: Value,
+        target_value: Value,
+        reason: String,
+    },
 }
 
-pub type ApplyResult<T> = std::result::Result<T, ApplyError>;
+pub type ApplyResult<T> = std::result::Result<T, ApplyOperationError>;
 
 pub trait Routable {
     fn route_get(&self, paths: &Path) -> RouteResult<Option<&Value>>;
@@ -77,7 +100,8 @@ impl Routable for Value {
 impl Routable for serde_json::Map<String, serde_json::Value> {
     fn route_get(&self, paths: &Path) -> RouteResult<Option<&Value>> {
         let k = paths.first_key_path().ok_or(RouteError::ExpectKeyPath {
-            actual: paths
+            json_value: Value::Object(self.clone()),
+            next_path: paths
                 .get(0)
                 .map(|v| v.clone())
                 .unwrap_or(PathElement::Empty),
@@ -96,7 +120,8 @@ impl Routable for serde_json::Map<String, serde_json::Value> {
 
     fn route_get_mut(&mut self, paths: &Path) -> RouteResult<Option<&mut Value>> {
         let k = paths.first_key_path().ok_or(RouteError::ExpectKeyPath {
-            actual: paths
+            json_value: Value::Object(self.clone()),
+            next_path: paths
                 .get(0)
                 .map(|v| v.clone())
                 .unwrap_or(PathElement::Empty),
@@ -117,7 +142,8 @@ impl Routable for serde_json::Map<String, serde_json::Value> {
 impl Routable for Vec<serde_json::Value> {
     fn route_get(&self, paths: &Path) -> RouteResult<Option<&Value>> {
         let i = paths.first_index_path().ok_or(RouteError::ExpectKeyPath {
-            actual: paths
+            json_value: Value::Array(self.clone()),
+            next_path: paths
                 .get(0)
                 .map(|v| v.clone())
                 .unwrap_or(PathElement::Empty),
@@ -138,7 +164,8 @@ impl Routable for Vec<serde_json::Value> {
         let i = paths
             .first_index_path()
             .ok_or(RouteError::ExpectIndexPath {
-                actual: paths
+                json_value: Value::Array(self.clone()),
+                next_path: paths
                     .get(0)
                     .map(|v| v.clone())
                     .unwrap_or(PathElement::Empty),
@@ -162,8 +189,10 @@ impl Appliable for Value {
             let (left, right) = paths.split_at(paths.len() - 1);
             return self
                 .route_get_mut(&left)
-                .map_err(|e| ApplyError::RouteError(e))?
-                .ok_or(ApplyError::RouteError(RouteError::ReachLeafNode(paths)))?
+                .map_err(|e| ApplyOperationError::RouteError(e))?
+                .ok_or(ApplyOperationError::RouteError(RouteError::ReachLeafNode(
+                    paths,
+                )))?
                 .apply(right, op);
         }
         match self {
@@ -176,9 +205,11 @@ impl Appliable for Value {
                     }
                     Ok(())
                 }
-                _ => Err(ApplyError::InvalidApplyTarget {
+                Operator::Noop() => Ok(()),
+                _ => Err(ApplyOperationError::InvalidApplyTarget {
                     operator: op,
-                    value: self.clone(),
+                    target_value: self.clone(),
+                    reason: format!("unexpected operator"),
                 }),
             },
         }
@@ -189,9 +220,18 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
     fn apply(&mut self, paths: Path, op: Operator) -> ApplyResult<()> {
         assert!(paths.len() == 1);
 
-        let k = paths.first_key_path().ok_or(JsonError::BadPath)?;
+        let k = paths
+            .first_key_path()
+            .ok_or(ApplyOperationError::RouteError(RouteError::ExpectKeyPath {
+                json_value: Value::Object(self.clone()),
+                next_path: paths
+                    .get(0)
+                    .map(|v| v.clone())
+                    .unwrap_or(PathElement::Empty),
+            }))?;
         let target_value = self.get(k);
         match &op {
+            Operator::Noop() => Ok(()),
             Operator::SubType(_, op, f) => {
                 if let Some(v) = f.apply(target_value, op)? {
                     self.insert(k.clone(), v);
@@ -222,7 +262,11 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
                 }
                 Ok(())
             }
-            _ => Err(JsonError::BadPath),
+            _ => Err(ApplyOperationError::InvalidApplyTarget {
+                operator: op,
+                target_value: Value::Object(self.clone()),
+                reason: format!("unexpected operator"),
+            }),
         }
     }
 }
@@ -231,9 +275,20 @@ impl Appliable for Vec<serde_json::Value> {
     fn apply(&mut self, paths: Path, op: Operator) -> ApplyResult<()> {
         assert!(paths.len() == 1);
 
-        let index = paths.first_index_path().ok_or(JsonError::BadPath)?;
+        let index = paths
+            .first_index_path()
+            .ok_or(ApplyOperationError::RouteError(
+                RouteError::ExpectIndexPath {
+                    json_value: Value::Array(self.clone()),
+                    next_path: paths
+                        .get(0)
+                        .map(|v| v.clone())
+                        .unwrap_or(PathElement::Empty),
+                },
+            ))?;
         let target_value = self.get(*index);
         match op {
+            Operator::Noop() => Ok(()),
             Operator::SubType(_, op, f) => {
                 if let Some(v) = f.apply(target_value, &op)? {
                     self[*index] = v;
@@ -278,7 +333,11 @@ impl Appliable for Vec<serde_json::Value> {
                 }
                 Ok(())
             }
-            _ => Err(JsonError::BadPath),
+            _ => Err(ApplyOperationError::InvalidApplyTarget {
+                operator: op,
+                target_value: Value::Array(self.clone()),
+                reason: format!("unexpected operator"),
+            }),
         }
     }
 }

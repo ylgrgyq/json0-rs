@@ -4,10 +4,11 @@ use std::vec;
 
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
+use itertools::Itertools;
 use serde_json::{Map, Value};
 
 use crate::error::{JsonError, Result};
-use crate::json::ApplyResult;
+use crate::json::{ApplyOperationError, ApplyResult};
 use crate::operation::Operator;
 use crate::path::Path;
 use crate::transformer::TransformSide;
@@ -187,31 +188,37 @@ impl SubTypeFunctions for NumberAddSubType {
         Ok(vec![new.clone()])
     }
 
-    fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Option<Value>> {
+    fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> ApplyResult<Option<Value>> {
         if let Value::Number(new_n) = sub_type_operand {
             if let Some(old_v) = val {
                 match old_v {
                     Value::Number(old_n) => {
                         if old_n.is_i64() && new_n.is_i64() {
-                            return Ok(Some(serde_json::to_value(
-                                old_n.as_i64().unwrap() + new_n.as_i64().unwrap(),
-                            )?));
+                            return Ok(Some(
+                                serde_json::to_value(
+                                    old_n.as_i64().unwrap() + new_n.as_i64().unwrap(),
+                                )
+                                .unwrap(),
+                            ));
                         }
 
-                        Ok(Some(serde_json::to_value(
-                            old_n.as_f64().unwrap() + new_n.as_f64().unwrap(),
-                        )?))
+                        Ok(Some(
+                            serde_json::to_value(old_n.as_f64().unwrap() + new_n.as_f64().unwrap())
+                                .unwrap(),
+                        ))
                     }
-                    _ => Err(JsonError::BadPath),
+                    _ => Err(ApplyOperationError::InvalidApplySubtypeOperationTarget {
+                        subtype_name: SubType::NumberAdd.to_string(),
+                        target_value: old_v.clone(),
+                        subtype_operand: sub_type_operand.clone(),
+                        reason: format!("NumberAdd operation must apply to a number value"),
+                    }),
                 }
             } else {
                 Ok(Some(sub_type_operand.clone()))
             }
         } else {
-            Err(JsonError::InvalidOperation(format!(
-                "operand: \"{}\" for NumberAdd sub type is not a number",
-                sub_type_operand
-            )))
+            panic!("operand: {sub_type_operand} in NumberAdd subtype operation is not a number");
         }
     }
 
@@ -503,8 +510,8 @@ impl SubTypeFunctions for TextSubType {
         Ok(ops)
     }
 
-    fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> Result<Option<Value>> {
-        let sub_operand: TextOperand = sub_type_operand.try_into()?;
+    fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> ApplyResult<Option<Value>> {
+        let sub_operand: TextOperand = sub_type_operand.try_into().unwrap();
         let p = sub_operand.offset;
         if let Some(v) = val {
             match v {
@@ -525,9 +532,13 @@ impl SubTypeFunctions for TextSubType {
                         let to_delete = sub_operand.uncheck_get_delete();
                         let deleted = &s[p..to_delete.len()];
                         if !to_delete.eq(deleted) {
-                            return Err(JsonError::InvalidOperation(
-                                "text to delete in text operation is not match target text".into(),
-                            ));
+                            return Err(ApplyOperationError::InvalidSubtypeOperator {
+                                subtype_name: SubType::Text.to_string(),
+                                subtype_operand: sub_type_operand.clone(),
+                                target_value: v.clone(),
+                                reason: "text to delete in text operation is not match target text"
+                                    .into(),
+                            });
                         }
 
                         if p <= s.len() {
@@ -542,10 +553,12 @@ impl SubTypeFunctions for TextSubType {
                     }
                 }
                 _ => {
-                    return Err(JsonError::InvalidOperation(format!(
-                        "can not apply text sub operation on value: {}",
-                        v
-                    )))
+                    return Err(ApplyOperationError::InvalidApplySubtypeOperationTarget {
+                        subtype_name: SubType::Text.to_string(),
+                        target_value: v.clone(),
+                        subtype_operand: sub_type_operand.clone(),
+                        reason: format!("Text operation must apply to a string value"),
+                    });
                 }
             }
         }

@@ -1,8 +1,14 @@
 use thiserror::Error;
 
+use crate::json::{ApplyOperationError, RouteError};
+
 #[derive(Error, Debug)]
 #[error("{}")]
 pub enum JsonError {
+    #[error("{0}")]
+    RouteError(#[from] RouteError),
+    #[error("{0}")]
+    ApplyOperationError(#[from] ApplyOperationError),
     #[error("Unexpected error: {0}")]
     UnexpectedError(String),
     #[error("The parameter: \"{0}\" is invalid for reason: {1}")]

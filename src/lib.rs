@@ -64,14 +64,16 @@ impl Json0 {
     pub fn apply(&self, value: &mut Value, operations: Vec<Operation>) -> Result<()> {
         for operation in operations {
             for op in operation.into_iter() {
-                value.apply(op.path.clone(), op.operator)?;
+                value
+                    .apply(op.path.clone(), op.operator)
+                    .map_err(|e| JsonError::ApplyOperationError(e))?;
             }
         }
         Ok(())
     }
 
     pub fn get_by_path<'a>(&self, value: &'a mut Value, paths: &Path) -> Result<Option<&'a Value>> {
-        value.route_get(paths)
+        value.route_get(paths).map_err(|e| JsonError::RouteError(e))
     }
 
     pub fn transform(
