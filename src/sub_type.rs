@@ -210,7 +210,7 @@ impl SubTypeFunctions for NumberAddSubType {
                         subtype_name: SubType::NumberAdd.to_string(),
                         target_value: old_v.clone(),
                         subtype_operand: sub_type_operand.clone(),
-                        reason: format!("NumberAdd operation must apply to a number value"),
+                        reason: "NumberAdd operation must apply to a number value".to_string(),
                     }),
                 }
             } else {
@@ -556,7 +556,7 @@ impl SubTypeFunctions for TextSubType {
                         subtype_name: SubType::Text.to_string(),
                         target_value: v.clone(),
                         subtype_operand: sub_type_operand.clone(),
-                        reason: format!("Text operation must apply to a string value"),
+                        reason: "Text operation must apply to a string value".to_string(),
                     });
                 }
             }

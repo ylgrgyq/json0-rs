@@ -108,10 +108,10 @@ impl Operator {
 
 impl Validation for Operator {
     fn validates(&self) -> Result<()> {
-        return match self {
+        match self {
             Operator::SubType(_, operand, f) => f.validate_operand(operand),
             _ => Ok(()),
-        };
+        }
     }
 }
 

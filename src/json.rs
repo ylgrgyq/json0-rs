@@ -101,10 +101,7 @@ impl Routable for serde_json::Map<String, serde_json::Value> {
     fn route_get(&self, paths: &Path) -> RouteResult<Option<&Value>> {
         let k = paths.first_key_path().ok_or(RouteError::ExpectKeyPath {
             json_value: Value::Object(self.clone()),
-            next_path: paths
-                .get(0)
-                .map(|v| v.clone())
-                .unwrap_or(PathElement::Empty),
+            next_path: paths.get(0).cloned().unwrap_or(PathElement::Empty),
         })?;
         if let Some(v) = self.get(k) {
             let next_level = paths.next_level();
@@ -121,10 +118,7 @@ impl Routable for serde_json::Map<String, serde_json::Value> {
     fn route_get_mut(&mut self, paths: &Path) -> RouteResult<Option<&mut Value>> {
         let k = paths.first_key_path().ok_or(RouteError::ExpectKeyPath {
             json_value: Value::Object(self.clone()),
-            next_path: paths
-                .get(0)
-                .map(|v| v.clone())
-                .unwrap_or(PathElement::Empty),
+            next_path: paths.get(0).cloned().unwrap_or(PathElement::Empty),
         })?;
         if let Some(v) = self.get_mut(k) {
             let next_level = paths.next_level();
@@ -143,10 +137,7 @@ impl Routable for Vec<serde_json::Value> {
     fn route_get(&self, paths: &Path) -> RouteResult<Option<&Value>> {
         let i = paths.first_index_path().ok_or(RouteError::ExpectKeyPath {
             json_value: Value::Array(self.clone()),
-            next_path: paths
-                .get(0)
-                .map(|v| v.clone())
-                .unwrap_or(PathElement::Empty),
+            next_path: paths.get(0).cloned().unwrap_or(PathElement::Empty),
         })?;
         if let Some(v) = self.get(*i) {
             let next_level = paths.next_level();
@@ -165,10 +156,7 @@ impl Routable for Vec<serde_json::Value> {
             .first_index_path()
             .ok_or(RouteError::ExpectIndexPath {
                 json_value: Value::Array(self.clone()),
-                next_path: paths
-                    .get(0)
-                    .map(|v| v.clone())
-                    .unwrap_or(PathElement::Empty),
+                next_path: paths.get(0).cloned().unwrap_or(PathElement::Empty),
             })?;
         if let Some(v) = self.get_mut(*i) {
             let next_level = paths.next_level();
@@ -189,7 +177,7 @@ impl Appliable for Value {
             let (left, right) = paths.split_at(paths.len() - 1);
             return self
                 .route_get_mut(&left)
-                .map_err(|e| ApplyOperationError::RouteError(e))?
+                .map_err(ApplyOperationError::RouteError)?
                 .ok_or(ApplyOperationError::RouteError(RouteError::ReachLeafNode(
                     paths,
                 )))?
@@ -209,7 +197,7 @@ impl Appliable for Value {
                 _ => Err(ApplyOperationError::InvalidApplyTarget {
                     operator: op,
                     target_value: self.clone(),
-                    reason: format!("unexpected operator"),
+                    reason: "unexpected operator".to_string(),
                 }),
             },
         }
@@ -224,10 +212,7 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
             .first_key_path()
             .ok_or(ApplyOperationError::RouteError(RouteError::ExpectKeyPath {
                 json_value: Value::Object(self.clone()),
-                next_path: paths
-                    .get(0)
-                    .map(|v| v.clone())
-                    .unwrap_or(PathElement::Empty),
+                next_path: paths.get(0).cloned().unwrap_or(PathElement::Empty),
             }))?;
         let target_value = self.get(k);
         match &op {
@@ -265,7 +250,7 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
             _ => Err(ApplyOperationError::InvalidApplyTarget {
                 operator: op,
                 target_value: Value::Object(self.clone()),
-                reason: format!("unexpected operator"),
+                reason: "unexpected operator".to_string(),
             }),
         }
     }
@@ -280,10 +265,7 @@ impl Appliable for Vec<serde_json::Value> {
             .ok_or(ApplyOperationError::RouteError(
                 RouteError::ExpectIndexPath {
                     json_value: Value::Array(self.clone()),
-                    next_path: paths
-                        .get(0)
-                        .map(|v| v.clone())
-                        .unwrap_or(PathElement::Empty),
+                    next_path: paths.get(0).cloned().unwrap_or(PathElement::Empty),
                 },
             ))?;
         let target_value = self.get(*index);
@@ -336,7 +318,7 @@ impl Appliable for Vec<serde_json::Value> {
             _ => Err(ApplyOperationError::InvalidApplyTarget {
                 operator: op,
                 target_value: Value::Array(self.clone()),
-                reason: format!("unexpected operator"),
+                reason: "unexpected operator".to_string(),
             }),
         }
     }

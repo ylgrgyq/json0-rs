@@ -66,14 +66,14 @@ impl Json0 {
             for op in operation.into_iter() {
                 value
                     .apply(op.path.clone(), op.operator)
-                    .map_err(|e| JsonError::ApplyOperationError(e))?;
+                    .map_err(JsonError::ApplyOperationError)?;
             }
         }
         Ok(())
     }
 
     pub fn get_by_path<'a>(&self, value: &'a mut Value, paths: &Path) -> Result<Option<&'a Value>> {
-        value.route_get(paths).map_err(|e| JsonError::RouteError(e))
+        value.route_get(paths).map_err(JsonError::RouteError)
     }
 
     pub fn transform(
