@@ -1,12 +1,31 @@
 use std::{cmp::Ordering, fmt::Display};
 
 use serde_json::Value;
+use thiserror::Error;
 
-use crate::error::{JsonError, Result};
+#[derive(Error, Debug)]
+#[error("{}")]
+pub enum PathError {
+    #[error("Empty path is not allowed")]
+    EmptyPath,
+    #[error("Invalid path format, reason: \"{reason}\"")]
+    ParsePathFromJsonFailed { reason: String },
+    #[error("Index path type should be a non-negative integer number, but is: {0}")]
+    InvalidIndexPath(String),
+}
+
+pub type Result<T> = std::result::Result<T, PathError>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PathElement {
+    // Invalid path element type, only used in error message
     Empty,
+    Index(usize),
+    Key(String),
+}
+
+#[derive(Debug, Clone)]
+pub enum ValidPathElement {
     Index(usize),
     Key(String),
 }
@@ -43,6 +62,27 @@ impl From<usize> for PathElement {
 impl From<String> for PathElement {
     fn from(k: String) -> Self {
         PathElement::Key(k)
+    }
+}
+
+impl From<ValidPathElement> for PathElement {
+    fn from(i: ValidPathElement) -> Self {
+        match i {
+            ValidPathElement::Index(index) => PathElement::Index(index),
+            ValidPathElement::Key(k) => PathElement::Key(k),
+        }
+    }
+}
+
+impl From<usize> for ValidPathElement {
+    fn from(i: usize) -> Self {
+        ValidPathElement::Index(i)
+    }
+}
+
+impl From<String> for ValidPathElement {
+    fn from(k: String) -> Self {
+        ValidPathElement::Key(k)
     }
 }
 
@@ -211,24 +251,30 @@ impl Display for Path {
 }
 
 impl TryFrom<&str> for Path {
-    type Error = JsonError;
+    type Error = PathError;
 
     fn try_from(input: &str) -> std::result::Result<Self, Self::Error> {
         if let Ok(value) = serde_json::from_str::<Value>(input) {
             return Path::try_from(&value);
         }
-        Err(JsonError::InvalidPathFormat)
+        Err(PathError::ParsePathFromJsonFailed {
+            reason: format!("{input} is not a valid path"),
+        })
     }
 }
 
 impl TryFrom<&Value> for Path {
-    type Error = JsonError;
+    type Error = PathError;
 
     fn try_from(value: &Value) -> std::result::Result<Self, Self::Error> {
         match value {
             Value::Array(arr) => {
                 if arr.is_empty() {
-                    Err(JsonError::InvalidPathFormat)
+                    Err(PathError::ParsePathFromJsonFailed {
+                        reason: format!(
+                            "json value: {value} is a empty array, we do not allow empty path"
+                        ),
+                    })
                 } else {
                     let paths = arr
                         .iter()
@@ -237,18 +283,66 @@ impl TryFrom<&Value> for Path {
                                 if let Some(i) = n.as_u64() {
                                     Ok(PathElement::Index(i as usize))
                                 } else {
-                                    Err(JsonError::InvalidPathElement(pe.to_string()))
+                                    Err(PathError::InvalidIndexPath(pe.to_string()))
                                 }
                             }
                             Value::String(k) => Ok(PathElement::Key(k.to_string())),
-                            _ => Err(JsonError::InvalidPathElement(pe.to_string())),
+                            _ => Err(PathError::ParsePathFromJsonFailed {
+                                reason: format!(
+                                    "{} is not a non-negative integer number or string",
+                                    pe.to_string()
+                                ),
+                            }),
                         })
                         .collect::<Result<Vec<PathElement>>>()?;
                     Ok(Path { paths })
                 }
             }
-            _ => Err(JsonError::InvalidPathFormat),
+            _ => Err(PathError::ParsePathFromJsonFailed {
+                reason: format!("json value: {value} is not an array"),
+            }),
         }
+    }
+}
+
+pub struct PathBuilder {
+    elements: Vec<PathElement>,
+}
+
+impl PathBuilder {
+    pub fn new() -> PathBuilder {
+        PathBuilder { elements: vec![] }
+    }
+
+    pub fn add_index_path(mut self, index: usize) -> Self {
+        self = self.add_path(ValidPathElement::Index(index));
+        self
+    }
+
+    pub fn add_key_path(mut self, key: String) -> Self {
+        self = self.add_path(ValidPathElement::Key(key));
+        self
+    }
+
+    pub fn add_path(mut self, val: ValidPathElement) -> Self {
+        self.elements.push(val.into());
+        self
+    }
+
+    pub fn add_all_paths(mut self, paths: Vec<ValidPathElement>) -> Self {
+        for p in paths.into_iter() {
+            self = self.add_path(p);
+        }
+        self
+    }
+
+    pub fn build(self) -> Result<Path> {
+        if self.elements.is_empty() {
+            return Err(PathError::EmptyPath);
+        }
+        Ok(Path {
+            paths: self.elements,
+        })
     }
 }
 
@@ -261,27 +355,27 @@ mod tests {
     fn test_parse_invalid_path() {
         assert_matches!(
             Path::try_from("]").unwrap_err(),
-            JsonError::InvalidPathFormat
+            PathError::ParsePathFromJsonFailed { reason: _ }
         );
         assert_matches!(
             Path::try_from("[").unwrap_err(),
-            JsonError::InvalidPathFormat
+            PathError::ParsePathFromJsonFailed { reason: _ }
         );
         assert_matches!(
             Path::try_from("").unwrap_err(),
-            JsonError::InvalidPathFormat
+            PathError::ParsePathFromJsonFailed { reason: _ }
         );
         assert_matches!(
             Path::try_from("[]").unwrap_err(),
-            JsonError::InvalidPathFormat
+            PathError::ParsePathFromJsonFailed { reason: _ }
         );
         assert_matches!(
             Path::try_from("hello").unwrap_err(),
-            JsonError::InvalidPathFormat
+            PathError::ParsePathFromJsonFailed { reason: _ }
         );
         assert_matches!(
             Path::try_from("[hello]").unwrap_err(),
-            JsonError::InvalidPathFormat
+            PathError::ParsePathFromJsonFailed { reason: _ }
         );
     }
 
