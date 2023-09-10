@@ -11,8 +11,6 @@ pub enum JsonError {
     ApplyOperationError(#[from] ApplyOperationError),
     #[error("Invalid operation: \"{0}\"")]
     InvalidOperation(String),
-    #[error("Unexpected error: {0}")]
-    UnexpectedError(String),
     #[error("The parameter: \"{0}\" is invalid for reason: {1}")]
     InvalidParameter(String, String),
     /// Path in JSON operation must holding path elements (number or key) splited by ',' and all of the

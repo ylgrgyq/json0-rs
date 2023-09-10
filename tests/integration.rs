@@ -1,3 +1,4 @@
+use core::panic;
 use itertools::Itertools;
 use json0_rs::error::{JsonError, Result};
 use json0_rs::operation::Operation;
@@ -6,12 +7,31 @@ use log::{debug, info};
 use serde_json::Value;
 use std::fmt::Display;
 use std::fs::File;
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, Error};
 use std::path::{Path, PathBuf};
 use std::vec;
 use test_log::test;
 
 const COMMENT_PREFIX: char = '#';
+
+// #[derive(Error, Debug)]
+// #[error("{}")]
+// pub enum InteeError {
+//     #[error("Reach leaf node in json, but still has path: {0} remain")]
+//     ReachLeafNode(Path),
+//     #[error("Expect key path type to route into {json_value}, but next path is {next_path}")]
+//     ExpectKeyPath {
+//         json_value: Value,
+//         next_path: PathElement,
+//     },
+//     #[error("Expect index path type to route into {json_value}, but next path is {next_path}")]
+//     ExpectIndexPath {
+//         json_value: Value,
+//         next_path: PathElement,
+//     },
+// }
+
+// pub type RouteResult<T> = std::result::Result<T, RouteError>;
 
 fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
 where
@@ -31,9 +51,14 @@ where
         for line in lines.flatten() {
             line_number += 1;
             if !line.is_empty() && !line.starts_with(COMMENT_PREFIX) {
-                let val = serde_json::from_str(&line).map_err(|e| {
-                    JsonError::UnexpectedError(format!("parse line: {} failed. {}", line, e))
-                })?;
+                let val = serde_json::from_str(&line)
+                    .map_err(|e| {
+                        Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!("parse line: {} failed. {}", line, e),
+                        );
+                    })
+                    .unwrap();
                 out.push((line_number, val));
             }
         }
@@ -104,9 +129,13 @@ impl<'a> TestPattern<TransformTest, Json0> for TransformTestPattern<'a> {
         input: &mut I,
     ) -> Result<Option<TransformTest>> {
         if let Some((line, i_l)) = input.next() {
-            let ((_, i_r), (_, r_l), (_, r_r)) = input.next_tuple().ok_or(
-                JsonError::UnexpectedError("not enough input values for test".into()),
-            )?;
+            let ((_, i_r), (_, r_l), (_, r_r)) = input
+                .next_tuple()
+                .ok_or(Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "not enough input values for test".to_string(),
+                ))
+                .unwrap();
 
             let test = TransformTest {
                 line,
@@ -188,9 +217,13 @@ impl<'a> TestPattern<ApplyOperationTest, ApplyOperationExecutor> for ApplyOperat
         input: &mut I,
     ) -> Result<Option<ApplyOperationTest>> {
         if let Some((line, json)) = input.next() {
-            let ((_, ops), (_, expect_result)) = input.next_tuple().ok_or(
-                JsonError::UnexpectedError("not enough input values for test".into()),
-            )?;
+            let ((_, ops), (_, expect_result)) = input
+                .next_tuple()
+                .ok_or(Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "not enough input values for test".to_string(),
+                ))
+                .unwrap();
 
             let mut operations = vec![];
             if let Value::Array(op_array) = ops {
@@ -273,9 +306,13 @@ impl<'a> TestPattern<InvertOperationTest, InvertOperationExecutor>
         input: &mut I,
     ) -> Result<Option<InvertOperationTest>> {
         if let Some((line, origin_op)) = input.next() {
-            let (_, expect_invert_op) = input.next().ok_or(JsonError::UnexpectedError(
-                "not enough input values for test".into(),
-            ))?;
+            let (_, expect_invert_op) = input
+                .next()
+                .ok_or(Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "not enough input values for test".to_string(),
+                ))
+                .unwrap();
 
             let test = InvertOperationTest {
                 origin_op: self
@@ -355,9 +392,13 @@ impl<'a> TestPattern<MergeOperationTest, MergeOperationExecutor> for MergeOperat
         input: &mut I,
     ) -> Result<Option<MergeOperationTest>> {
         if let Some((line, base_op)) = input.next() {
-            let ((_, other_op), (_, expect_result)) = input.next_tuple().ok_or(
-                JsonError::UnexpectedError("not enough input values for test".into()),
-            )?;
+            let ((_, other_op), (_, expect_result)) = input
+                .next_tuple()
+                .ok_or(Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "not enough input values for test".to_string(),
+                ))
+                .unwrap();
 
             let test = MergeOperationTest {
                 base_op: self
