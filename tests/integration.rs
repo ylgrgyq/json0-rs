@@ -1,6 +1,5 @@
-use core::panic;
 use itertools::Itertools;
-use json0_rs::error::{JsonError, Result};
+use json0_rs::error::Result;
 use json0_rs::operation::Operation;
 use json0_rs::Json0;
 use log::{debug, info};
@@ -13,25 +12,6 @@ use std::vec;
 use test_log::test;
 
 const COMMENT_PREFIX: char = '#';
-
-// #[derive(Error, Debug)]
-// #[error("{}")]
-// pub enum InteeError {
-//     #[error("Reach leaf node in json, but still has path: {0} remain")]
-//     ReachLeafNode(Path),
-//     #[error("Expect key path type to route into {json_value}, but next path is {next_path}")]
-//     ExpectKeyPath {
-//         json_value: Value,
-//         next_path: PathElement,
-//     },
-//     #[error("Expect index path type to route into {json_value}, but next path is {next_path}")]
-//     ExpectIndexPath {
-//         json_value: Value,
-//         next_path: PathElement,
-//     },
-// }
-
-// pub type RouteResult<T> = std::result::Result<T, RouteError>;
 
 fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
 where
