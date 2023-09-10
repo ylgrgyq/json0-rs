@@ -12,7 +12,7 @@ pub enum JsonError {
     RouteError(#[from] RouteError),
     #[error("{0}")]
     ApplyOperationError(#[from] ApplyOperationError),
-    #[error("Invalid operation: \"{0}\"")]
+    #[error("Invalid operation, reason: \"{0}\"")]
     InvalidOperation(String),
     #[error("{0}")]
     PathError(#[from] PathError),

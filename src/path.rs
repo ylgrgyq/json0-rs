@@ -416,4 +416,9 @@ mod tests {
         assert!(!paths.decrease_index(0));
         assert!(!paths.increase_index(0));
     }
+
+    #[test]
+    fn test_empty_path() {
+        assert_matches!(PathBuilder::new().build(), Err(PathError::EmptyPath));
+    }
 }
