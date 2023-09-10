@@ -1,6 +1,6 @@
 [package]
 name = "json0-rs"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "MIT"
 description = "JSON0 OT implement in rust."
