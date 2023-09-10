@@ -13,6 +13,8 @@ use serde_json::Value;
 pub enum RouteError {
     #[error("Reach leaf node in json, but still has path: {0} remain")]
     ReachLeafNode(Path),
+    #[error("No more path to route into {json_value}")]
+    NotEnoughPath { json_value: Value },
     #[error("Expect key path type to route into {json_value}, but next path is {next_path}")]
     ExpectKeyPath {
         json_value: Value,
@@ -99,9 +101,15 @@ impl Routable for Value {
 
 impl Routable for serde_json::Map<String, serde_json::Value> {
     fn route_get(&self, paths: &Path) -> RouteResult<Option<&Value>> {
-        let k = paths.first_key_path().ok_or(RouteError::ExpectKeyPath {
-            json_value: Value::Object(self.clone()),
-            next_path: paths.get(0).cloned().unwrap_or(PathElement::Empty),
+        let k = paths.first_key_path().ok_or(if paths.is_empty() {
+            RouteError::NotEnoughPath {
+                json_value: Value::Object(self.clone()),
+            }
+        } else {
+            RouteError::ExpectKeyPath {
+                json_value: Value::Object(self.clone()),
+                next_path: paths.get(0).cloned().unwrap(),
+            }
         })?;
         if let Some(v) = self.get(k) {
             let next_level = paths.next_level();
@@ -116,9 +124,15 @@ impl Routable for serde_json::Map<String, serde_json::Value> {
     }
 
     fn route_get_mut(&mut self, paths: &Path) -> RouteResult<Option<&mut Value>> {
-        let k = paths.first_key_path().ok_or(RouteError::ExpectKeyPath {
-            json_value: Value::Object(self.clone()),
-            next_path: paths.get(0).cloned().unwrap_or(PathElement::Empty),
+        let k = paths.first_key_path().ok_or(if paths.is_empty() {
+            RouteError::NotEnoughPath {
+                json_value: Value::Object(self.clone()),
+            }
+        } else {
+            RouteError::ExpectKeyPath {
+                json_value: Value::Object(self.clone()),
+                next_path: paths.get(0).cloned().unwrap(),
+            }
         })?;
         if let Some(v) = self.get_mut(k) {
             let next_level = paths.next_level();
@@ -135,9 +149,15 @@ impl Routable for serde_json::Map<String, serde_json::Value> {
 
 impl Routable for Vec<serde_json::Value> {
     fn route_get(&self, paths: &Path) -> RouteResult<Option<&Value>> {
-        let i = paths.first_index_path().ok_or(RouteError::ExpectKeyPath {
-            json_value: Value::Array(self.clone()),
-            next_path: paths.get(0).cloned().unwrap_or(PathElement::Empty),
+        let i = paths.first_index_path().ok_or(if paths.is_empty() {
+            RouteError::NotEnoughPath {
+                json_value: Value::Array(self.clone()),
+            }
+        } else {
+            RouteError::ExpectKeyPath {
+                json_value: Value::Array(self.clone()),
+                next_path: paths.get(0).cloned().unwrap(),
+            }
         })?;
         if let Some(v) = self.get(*i) {
             let next_level = paths.next_level();
@@ -152,12 +172,16 @@ impl Routable for Vec<serde_json::Value> {
     }
 
     fn route_get_mut(&mut self, paths: &Path) -> RouteResult<Option<&mut Value>> {
-        let i = paths
-            .first_index_path()
-            .ok_or(RouteError::ExpectIndexPath {
+        let i = paths.first_index_path().ok_or(if paths.is_empty() {
+            RouteError::NotEnoughPath {
                 json_value: Value::Array(self.clone()),
-                next_path: paths.get(0).cloned().unwrap_or(PathElement::Empty),
-            })?;
+            }
+        } else {
+            RouteError::ExpectIndexPath {
+                json_value: Value::Array(self.clone()),
+                next_path: paths.get(0).cloned().unwrap(),
+            }
+        })?;
         if let Some(v) = self.get_mut(*i) {
             let next_level = paths.next_level();
             if next_level.is_empty() {
@@ -212,7 +236,7 @@ impl Appliable for serde_json::Map<String, serde_json::Value> {
             .first_key_path()
             .ok_or(ApplyOperationError::RouteError(RouteError::ExpectKeyPath {
                 json_value: Value::Object(self.clone()),
-                next_path: paths.get(0).cloned().unwrap_or(PathElement::Empty),
+                next_path: paths.get(0).cloned().unwrap(),
             }))?;
         let target_value = self.get(k);
         match &op {
@@ -265,7 +289,7 @@ impl Appliable for Vec<serde_json::Value> {
             .ok_or(ApplyOperationError::RouteError(
                 RouteError::ExpectIndexPath {
                     json_value: Value::Array(self.clone()),
-                    next_path: paths.get(0).cloned().unwrap_or(PathElement::Empty),
+                    next_path: paths.get(0).cloned().unwrap(),
                 },
             ))?;
         let target_value = self.get(*index);

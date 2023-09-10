@@ -18,14 +18,6 @@ pub type Result<T> = std::result::Result<T, PathError>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PathElement {
-    // Invalid path element type, only used in error message
-    Empty,
-    Index(usize),
-    Key(String),
-}
-
-#[derive(Debug, Clone)]
-pub enum ValidPathElement {
     Index(usize),
     Key(String),
 }
@@ -36,10 +28,10 @@ impl PartialOrd for PathElement {
             // only index can compare
             PathElement::Index(a) => match other {
                 PathElement::Index(b) => a.partial_cmp(b),
-                PathElement::Empty | PathElement::Key(_) => None,
+                PathElement::Key(_) => None,
             },
             PathElement::Key(a) => match other {
-                PathElement::Empty | PathElement::Index(_) => None,
+                PathElement::Index(_) => None,
                 PathElement::Key(b) => {
                     if a == b {
                         Some(Ordering::Equal)
@@ -48,7 +40,6 @@ impl PartialOrd for PathElement {
                     }
                 }
             },
-            PathElement::Empty => None,
         }
     }
 }
@@ -65,33 +56,11 @@ impl From<String> for PathElement {
     }
 }
 
-impl From<ValidPathElement> for PathElement {
-    fn from(i: ValidPathElement) -> Self {
-        match i {
-            ValidPathElement::Index(index) => PathElement::Index(index),
-            ValidPathElement::Key(k) => PathElement::Key(k),
-        }
-    }
-}
-
-impl From<usize> for ValidPathElement {
-    fn from(i: usize) -> Self {
-        ValidPathElement::Index(i)
-    }
-}
-
-impl From<String> for ValidPathElement {
-    fn from(k: String) -> Self {
-        ValidPathElement::Key(k)
-    }
-}
-
 impl Display for PathElement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             PathElement::Index(i) => f.write_fmt(format_args!("{}", i)),
             PathElement::Key(k) => f.write_fmt(format_args!("\"{}\"", k)),
-            PathElement::Empty => f.write_str("\"\""),
         }
     }
 }
@@ -126,7 +95,7 @@ impl Path {
         let first_path = self.paths.get(index)?;
 
         match first_path {
-            PathElement::Empty | PathElement::Index(_) => None,
+            PathElement::Index(_) => None,
             PathElement::Key(k) => Some(k),
         }
     }
@@ -136,7 +105,7 @@ impl Path {
 
         match first_path {
             PathElement::Index(i) => Some(i),
-            PathElement::Empty | PathElement::Key(_) => None,
+            PathElement::Key(_) => None,
         }
     }
 
@@ -315,21 +284,21 @@ impl PathBuilder {
     }
 
     pub fn add_index_path(mut self, index: usize) -> Self {
-        self = self.add_path(ValidPathElement::Index(index));
+        self = self.add_path(PathElement::Index(index));
         self
     }
 
     pub fn add_key_path(mut self, key: String) -> Self {
-        self = self.add_path(ValidPathElement::Key(key));
+        self = self.add_path(PathElement::Key(key));
         self
     }
 
-    pub fn add_path(mut self, val: ValidPathElement) -> Self {
+    pub fn add_path(mut self, val: PathElement) -> Self {
         self.elements.push(val.into());
         self
     }
 
-    pub fn add_all_paths(mut self, paths: Vec<ValidPathElement>) -> Self {
+    pub fn add_all_paths(mut self, paths: Vec<PathElement>) -> Self {
         for p in paths.into_iter() {
             self = self.add_path(p);
         }
