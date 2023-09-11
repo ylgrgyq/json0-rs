@@ -31,7 +31,7 @@ pub struct Json0 {
 impl Json0 {
     pub fn new() -> Json0 {
         let functions = Rc::new(SubTypeFunctionsHolder::new());
-        let transformer = Transformer::new(functions.clone());
+        let transformer = Transformer::new();
         let operation_faction = OperationFactory::new(functions.clone());
 
         Json0 {

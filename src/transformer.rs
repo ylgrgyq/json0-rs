@@ -47,7 +47,7 @@ pub enum TransformSide {
 pub struct Transformer {}
 
 impl Transformer {
-    pub fn new(_: Rc<SubTypeFunctionsHolder>) -> Transformer {
+    pub fn new() -> Transformer {
         Transformer {}
     }
 
