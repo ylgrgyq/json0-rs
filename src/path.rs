@@ -258,8 +258,7 @@ impl TryFrom<&Value> for Path {
                             Value::String(k) => Ok(PathElement::Key(k.to_string())),
                             _ => Err(PathError::ParsePathFromJsonFailed {
                                 reason: format!(
-                                    "{} is not a non-negative integer number or string",
-                                    pe.to_string()
+                                    "{pe} is not a non-negative integer number or string",
                                 ),
                             }),
                         })
@@ -274,15 +273,12 @@ impl TryFrom<&Value> for Path {
     }
 }
 
+#[derive(Default)]
 pub struct PathBuilder {
     elements: Vec<PathElement>,
 }
 
 impl PathBuilder {
-    pub fn new() -> PathBuilder {
-        PathBuilder { elements: vec![] }
-    }
-
     pub fn add_index_path(mut self, index: usize) -> Self {
         self = self.add_path(PathElement::Index(index));
         self
@@ -294,7 +290,7 @@ impl PathBuilder {
     }
 
     pub fn add_path(mut self, val: PathElement) -> Self {
-        self.elements.push(val.into());
+        self.elements.push(val);
         self
     }
 
@@ -419,6 +415,6 @@ mod tests {
 
     #[test]
     fn test_empty_path() {
-        assert_matches!(PathBuilder::new().build(), Err(PathError::EmptyPath));
+        assert_matches!(PathBuilder::default().build(), Err(PathError::EmptyPath));
     }
 }

@@ -455,7 +455,7 @@ impl SubTypeFunctions for TextSubType {
             let p = self.transform_position(
                 new_operand.offset,
                 &base_operand,
-                side == TransformSide::RIGHT,
+                side == TransformSide::Right,
             );
             ops.push(TextOperand::new_insert(p, new_operand.insert.unwrap()).to_value())
         } else {

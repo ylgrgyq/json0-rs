@@ -1,11 +1,8 @@
-use std::rc::Rc;
-
 use crate::common::Validation;
 use crate::error::Result;
 use crate::json::Appliable;
 use crate::operation::{Operation, OperationComponent, Operator};
 use crate::path::{Path, PathElement};
-use crate::sub_type::SubTypeFunctionsHolder;
 
 fn is_equivalent_to_noop(op: &OperationComponent) -> bool {
     match &op.operator {
@@ -40,8 +37,8 @@ fn is_same_operand(op_a: &OperationComponent, op_b: &OperationComponent) -> bool
 
 #[derive(PartialEq)]
 pub enum TransformSide {
-    LEFT,
-    RIGHT,
+    Left,
+    Right,
 }
 
 pub struct Transformer {}
@@ -67,12 +64,12 @@ impl Transformer {
             let a = self.transform_component(
                 operation.get(0).unwrap().clone(),
                 base_operation.get(0).unwrap(),
-                TransformSide::LEFT,
+                TransformSide::Left,
             )?;
             let b = self.transform_component(
                 base_operation.get(0).unwrap().clone(),
                 operation.get(0).unwrap(),
-                TransformSide::RIGHT,
+                TransformSide::Right,
             )?;
 
             return Ok((a.into(), b.into()));
@@ -116,8 +113,8 @@ impl Transformer {
             match base {
                 Some(b) => {
                     let backup = op.clone();
-                    let mut a = self.transform_component(op, &b, TransformSide::LEFT)?;
-                    let mut b = self.transform_component(b, &backup, TransformSide::RIGHT)?;
+                    let mut a = self.transform_component(op, &b, TransformSide::Left)?;
+                    let mut b = self.transform_component(b, &backup, TransformSide::Right)?;
                     assert!(b.len() == 1);
                     base = b.pop();
 
@@ -204,7 +201,7 @@ impl Transformer {
                         return Ok(vec![]);
                     }
                     if let Operator::ListReplace(new_li, _) = &new_op.operator {
-                        if side == TransformSide::LEFT {
+                        if side == TransformSide::Left {
                             return Ok(vec![OperationComponent::new(
                                 new_op.path,
                                 Operator::ListReplace(new_li.clone(), li_v.clone()),
@@ -221,7 +218,7 @@ impl Transformer {
             Operator::ListInsert(_) => {
                 if let Operator::ListInsert(_) = &new_op.operator {
                     if same_operand && base_op_is_prefix {
-                        if side == TransformSide::RIGHT {
+                        if side == TransformSide::Right {
                             new_op.path.increase_index(base_operate_path_len);
                         }
                         return Ok(vec![new_op]);
@@ -295,7 +292,7 @@ impl Transformer {
 
                     match &new_op.operator {
                         Operator::ObjectReplace(new_oi, _) | Operator::ObjectInsert(new_oi) => {
-                            if side == TransformSide::RIGHT {
+                            if side == TransformSide::Right {
                                 return Ok(vec![]);
                             }
                             return Ok(vec![OperationComponent {
@@ -314,7 +311,7 @@ impl Transformer {
                     if let Operator::ObjectReplace(new_oi, _) | Operator::ObjectInsert(new_oi) =
                         &new_op.operator
                     {
-                        if side == TransformSide::LEFT {
+                        if side == TransformSide::Left {
                             if same_operand {
                                 return Ok(vec![OperationComponent {
                                     path: base_op.path.clone(),
@@ -341,7 +338,7 @@ impl Transformer {
                             return Ok(vec![]);
                         }
                     } else if let Operator::ObjectDelete(_) = &new_op.operator {
-                        if side == TransformSide::RIGHT {
+                        if side == TransformSide::Right {
                             return Ok(vec![]);
                         }
                     }
@@ -355,7 +352,7 @@ impl Transformer {
                     if let Operator::ObjectReplace(new_oi, _) | Operator::ObjectInsert(new_oi) =
                         &new_op.operator
                     {
-                        if side == TransformSide::LEFT {
+                        if side == TransformSide::Left {
                             return Ok(vec![OperationComponent {
                                 path: new_op.path.clone(),
                                 operator: Operator::ObjectInsert(new_oi.clone()),
@@ -387,7 +384,7 @@ impl Transformer {
                                     // already moved to where we want
                                     return Ok(vec![]);
                                 }
-                                if side == TransformSide::LEFT {
+                                if side == TransformSide::Left {
                                     new_op.path.replace(base_operate_path_len, other_to.clone());
                                     if from == to {
                                         new_op.operator = base_op.operator.clone();
@@ -417,7 +414,7 @@ impl Transformer {
                                     if (&other_to > other_from && to > from)
                                         || (&other_to < other_from && to < from)
                                     {
-                                        if side == TransformSide::RIGHT {
+                                        if side == TransformSide::Right {
                                             n_lm += 1;
                                         }
                                     } else if to > from {
