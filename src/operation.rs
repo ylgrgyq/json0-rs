@@ -4,6 +4,7 @@ use std::{
     mem,
     ops::{Deref, DerefMut},
     rc::Rc,
+    sync::Arc,
     vec,
 };
 
@@ -19,7 +20,7 @@ use serde_json::{Map, Value};
 
 pub enum Operator {
     Noop(),
-    SubType(SubType, Value, Box<dyn SubTypeFunctions>),
+    SubType(SubType, Value, Arc<dyn SubTypeFunctions>),
     ListInsert(Value),
     ListDelete(Value),
     // Replace value from last value to first value in json array.
@@ -584,11 +585,11 @@ pub struct NumberAddOperationBuilder {
     path_builder: Cell<PathBuilder>,
     number_i64: Option<i64>,
     number_f64: Option<f64>,
-    sub_type_function: Box<dyn SubTypeFunctions>,
+    sub_type_function: Arc<dyn SubTypeFunctions>,
 }
 
 impl NumberAddOperationBuilder {
-    pub fn new(sub_type_function: Box<dyn SubTypeFunctions>) -> NumberAddOperationBuilder {
+    pub fn new(sub_type_function: Arc<dyn SubTypeFunctions>) -> NumberAddOperationBuilder {
         NumberAddOperationBuilder {
             path_builder: Cell::new(PathBuilder::default()),
             number_i64: None,
@@ -647,11 +648,11 @@ pub struct TextOperationBuilder {
     offset: usize,
     insert_val: Option<String>,
     delete_val: Option<String>,
-    sub_type_function: Box<dyn SubTypeFunctions>,
+    sub_type_function: Arc<dyn SubTypeFunctions>,
 }
 
 impl TextOperationBuilder {
-    pub fn new(sub_type_function: Box<dyn SubTypeFunctions>) -> TextOperationBuilder {
+    pub fn new(sub_type_function: Arc<dyn SubTypeFunctions>) -> TextOperationBuilder {
         TextOperationBuilder {
             path_builder: Cell::new(PathBuilder::default()),
             offset: 0,
@@ -723,13 +724,13 @@ pub struct SubTypeOperationBuilder {
     path_builder: Cell<PathBuilder>,
     sub_type: SubType,
     sub_type_operator: Option<Value>,
-    sub_type_function: Option<Box<dyn SubTypeFunctions>>,
+    sub_type_function: Option<Arc<dyn SubTypeFunctions>>,
 }
 
 impl SubTypeOperationBuilder {
     fn new(
         sub_type: SubType,
-        sub_type_function: Option<Box<dyn SubTypeFunctions>>,
+        sub_type_function: Option<Arc<dyn SubTypeFunctions>>,
     ) -> SubTypeOperationBuilder {
         SubTypeOperationBuilder {
             path_builder: Cell::new(PathBuilder::default()),
@@ -744,7 +745,7 @@ impl SubTypeOperationBuilder {
         self
     }
 
-    pub fn sub_type_functions(mut self, val: Box<dyn SubTypeFunctions>) -> Self {
+    pub fn sub_type_functions(mut self, val: Arc<dyn SubTypeFunctions>) -> Self {
         self.sub_type_function = Some(val);
         self
     }

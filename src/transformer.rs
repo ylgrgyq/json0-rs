@@ -187,7 +187,7 @@ impl Transformer {
                                     Operator::SubType(
                                         base_sub_type.clone(),
                                         new_operand,
-                                        base_f.box_clone(),
+                                        base_f.clone(),
                                     ),
                                 )
                             })

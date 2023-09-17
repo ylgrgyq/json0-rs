@@ -1,5 +1,6 @@
 use std::fmt::Display;
 use std::hash::Hash;
+use std::sync::Arc;
 use std::vec;
 
 use dashmap::mapref::one::Ref;
@@ -15,8 +16,6 @@ const NUMBER_ADD_SUB_TYPE_NAME: &str = "na";
 const TEXT_SUB_TYPE_NAME: &str = "text";
 
 pub trait SubTypeFunctions {
-    fn box_clone(&self) -> Box<dyn SubTypeFunctions>;
-
     fn invert(&self, path: &Path, sub_type_operand: &Value) -> Result<Value>;
 
     fn merge(&self, base_operand: &Value, other_operand: &Value) -> Option<Value>;
@@ -26,12 +25,6 @@ pub trait SubTypeFunctions {
     fn apply(&self, val: Option<&Value>, sub_type_operand: &Value) -> ApplyResult<Option<Value>>;
 
     fn validate_operand(&self, val: &Value) -> Result<()>;
-}
-
-impl Clone for Box<dyn SubTypeFunctions> {
-    fn clone(&self) -> Self {
-        self.box_clone()
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -76,22 +69,22 @@ impl Display for SubType {
 }
 
 pub struct SubTypeFunctionsHolder {
-    subtype_operators: DashMap<SubType, Box<dyn SubTypeFunctions>>,
+    subtype_operators: DashMap<SubType, Arc<dyn SubTypeFunctions>>,
 }
 
 impl SubTypeFunctionsHolder {
     pub fn new() -> SubTypeFunctionsHolder {
-        let subtype_operators: DashMap<SubType, Box<dyn SubTypeFunctions>> = DashMap::new();
-        subtype_operators.insert(SubType::NumberAdd, Box::new(NumberAddSubType {}));
-        subtype_operators.insert(SubType::Text, Box::new(TextSubType {}));
+        let subtype_operators: DashMap<SubType, Arc<dyn SubTypeFunctions>> = DashMap::new();
+        subtype_operators.insert(SubType::NumberAdd, Arc::new(NumberAddSubType {}));
+        subtype_operators.insert(SubType::Text, Arc::new(TextSubType {}));
         SubTypeFunctionsHolder { subtype_operators }
     }
 
     pub fn register_subtype(
         &self,
         sub_type: String,
-        o: Box<dyn SubTypeFunctions>,
-    ) -> Result<Option<Box<dyn SubTypeFunctions>>> {
+        o: Arc<dyn SubTypeFunctions>,
+    ) -> Result<Option<Arc<dyn SubTypeFunctions>>> {
         if sub_type.eq(NUMBER_ADD_SUB_TYPE_NAME) || sub_type.eq(TEXT_SUB_TYPE_NAME) {
             return Err(JsonError::ConflictSubType(sub_type));
         }
@@ -99,7 +92,7 @@ impl SubTypeFunctionsHolder {
         Ok(self.subtype_operators.insert(SubType::Custome(sub_type), o))
     }
 
-    pub fn unregister_subtype(&self, sub_type: &String) -> Option<Box<dyn SubTypeFunctions>> {
+    pub fn unregister_subtype(&self, sub_type: &String) -> Option<Arc<dyn SubTypeFunctions>> {
         if sub_type.eq(NUMBER_ADD_SUB_TYPE_NAME) || sub_type.eq(TEXT_SUB_TYPE_NAME) {
             return None;
         }
@@ -109,7 +102,7 @@ impl SubTypeFunctionsHolder {
             .map(|s| s.1)
     }
 
-    pub fn get(&self, sub_type: &SubType) -> Option<Ref<SubType, Box<dyn SubTypeFunctions>>> {
+    pub fn get(&self, sub_type: &SubType) -> Option<Ref<SubType, Arc<dyn SubTypeFunctions>>> {
         self.subtype_operators.get(sub_type)
     }
 
@@ -127,10 +120,6 @@ impl Default for SubTypeFunctionsHolder {
 struct NumberAddSubType {}
 
 impl SubTypeFunctions for NumberAddSubType {
-    fn box_clone(&self) -> Box<dyn SubTypeFunctions> {
-        Box::new(NumberAddSubType {})
-    }
-
     fn invert(&self, _: &Path, sub_type_operand: &Value) -> Result<Value> {
         if let Value::Number(n) = sub_type_operand {
             if n.is_i64() {
@@ -364,10 +353,6 @@ impl TextSubType {
 }
 
 impl SubTypeFunctions for TextSubType {
-    fn box_clone(&self) -> Box<dyn SubTypeFunctions> {
-        Box::new(TextSubType {})
-    }
-
     fn invert(&self, _: &Path, sub_type_operand: &Value) -> Result<Value> {
         let s: TextOperand = sub_type_operand.try_into()?;
         Ok(self.invert_object(&s)?.to_value())

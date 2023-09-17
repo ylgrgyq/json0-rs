@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{rc::Rc, sync::Arc};
 
 use error::JsonError;
 use json::{Appliable, Routable};
@@ -44,12 +44,12 @@ impl Json0 {
     pub fn register_subtype(
         &self,
         sub_type: String,
-        o: Box<dyn SubTypeFunctions>,
-    ) -> Result<Option<Box<dyn SubTypeFunctions>>> {
+        o: Arc<dyn SubTypeFunctions>,
+    ) -> Result<Option<Arc<dyn SubTypeFunctions>>> {
         self.functions.register_subtype(sub_type, o)
     }
 
-    pub fn unregister_subtype(&self, sub_type: &String) -> Option<Box<dyn SubTypeFunctions>> {
+    pub fn unregister_subtype(&self, sub_type: &String) -> Option<Arc<dyn SubTypeFunctions>> {
         self.functions.unregister_subtype(sub_type)
     }
 
