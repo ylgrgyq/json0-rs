@@ -18,7 +18,7 @@ const TEXT_SUB_TYPE_NAME: &str = "text";
 pub trait SubTypeFunctions {
     fn box_clone(&self) -> Box<dyn SubTypeFunctions>;
 
-    fn invert(&self, path: &Path, sub_type_operand: &Value) -> Result<Operator>;
+    fn invert(&self, path: &Path, sub_type_operand: &Value) -> Result<Value>;
 
     fn merge(&self, base_operand: &Value, other: &Operator) -> Option<Operator>;
 
@@ -132,20 +132,12 @@ impl SubTypeFunctions for NumberAddSubType {
         Box::new(NumberAddSubType {})
     }
 
-    fn invert(&self, _: &Path, sub_type_operand: &Value) -> Result<Operator> {
+    fn invert(&self, _: &Path, sub_type_operand: &Value) -> Result<Value> {
         if let Value::Number(n) = sub_type_operand {
             if n.is_i64() {
-                Ok(Operator::SubType(
-                    SubType::NumberAdd,
-                    serde_json::to_value(-n.as_i64().unwrap()).unwrap(),
-                    self.box_clone(),
-                ))
+                Ok(serde_json::to_value(-n.as_i64().unwrap()).unwrap())
             } else if n.is_f64() {
-                Ok(Operator::SubType(
-                    SubType::NumberAdd,
-                    serde_json::to_value(-n.as_f64().unwrap()).unwrap(),
-                    self.box_clone(),
-                ))
+                Ok(serde_json::to_value(-n.as_f64().unwrap()).unwrap())
             } else {
                 Err(JsonError::InvalidOperation(format!(
                     "invalid number value:\"{sub_type_operand}\" in NumberAdd sub type operand",
@@ -390,13 +382,9 @@ impl SubTypeFunctions for TextSubType {
         Box::new(TextSubType {})
     }
 
-    fn invert(&self, _: &Path, sub_type_operand: &Value) -> Result<Operator> {
+    fn invert(&self, _: &Path, sub_type_operand: &Value) -> Result<Value> {
         let s: TextOperand = sub_type_operand.try_into()?;
-        Ok(Operator::SubType(
-            SubType::Text,
-            self.invert_object(&s)?.to_value(),
-            self.box_clone(),
-        ))
+        Ok(self.invert_object(&s)?.to_value())
     }
 
     fn merge(&self, base: &Value, other: &Operator) -> Option<Operator> {

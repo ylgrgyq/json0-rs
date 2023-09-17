@@ -178,7 +178,10 @@ impl OperationComponent {
         let mut path = self.path.clone();
         let operator = match &self.operator {
             Operator::Noop() => Operator::Noop(),
-            Operator::SubType(_, o, f) => f.invert(&path, o)?,
+            Operator::SubType(t, o, f) => {
+                let new_operand = f.invert(&path, o)?;
+                Operator::SubType(t.clone(), new_operand, f.clone())
+            }
             Operator::ListInsert(v) => Operator::ListDelete(v.clone()),
             Operator::ListDelete(v) => Operator::ListInsert(v.clone()),
             Operator::ListReplace(new_v, old_v) => {
