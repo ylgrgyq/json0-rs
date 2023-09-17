@@ -284,8 +284,8 @@ impl PathBuilder {
         self
     }
 
-    pub fn add_key_path(mut self, key: String) -> Self {
-        self = self.add_path(PathElement::Key(key));
+    pub fn add_key_path<S: AsRef<str>>(mut self, key: S) -> Self {
+        self = self.add_path(PathElement::Key(key.as_ref().into()));
         self
     }
 
@@ -308,6 +308,34 @@ impl PathBuilder {
         Ok(Path {
             paths: self.elements,
         })
+    }
+}
+
+pub trait AppendPath: Sized {
+    fn append_path_element(self, val: PathElement) -> Self;
+
+    fn append_index_path(mut self, index: usize) -> Self {
+        self = self.append_path_element(PathElement::Index(index));
+        self
+    }
+
+    fn append_key_path<S: AsRef<str>>(mut self, key: S) -> Self {
+        self = self.append_path_element(PathElement::Key(key.as_ref().into()));
+        self
+    }
+
+    fn append_all_path_elements(mut self, paths: Vec<PathElement>) -> Self {
+        for p in paths.into_iter() {
+            self = self.append_path_element(p);
+        }
+        self
+    }
+}
+
+impl AppendPath for PathBuilder {
+    fn append_path_element(mut self, val: PathElement) -> Self {
+        self.elements.push(val);
+        self
     }
 }
 

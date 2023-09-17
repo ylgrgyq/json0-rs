@@ -1,4 +1,5 @@
 use std::{
+    cell::Cell,
     fmt::{Debug, Display},
     mem,
     ops::{Deref, DerefMut},
@@ -10,7 +11,7 @@ use crate::{
     common::Validation,
     error::JsonError,
     error::Result,
-    path::{Path, PathElement},
+    path::{AppendPath, Path, PathBuilder, PathElement},
     sub_type::{SubType, SubTypeFunctions, SubTypeFunctionsHolder},
 };
 use itertools::Itertools;
@@ -329,16 +330,12 @@ impl Display for OperationComponent {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Operation {
     operations: Vec<OperationComponent>,
 }
 
 impl Operation {
-    pub fn empty_operation() -> Operation {
-        Operation { operations: vec![] }
-    }
-
     pub fn new(operations: Vec<OperationComponent>) -> Result<Operation> {
         operations.validates()?;
         Ok(Operation { operations })
@@ -447,16 +444,16 @@ impl Display for Operation {
 }
 
 pub struct ListOperationBuilder {
-    path: Path,
+    path_builder: Cell<PathBuilder>,
     insert: Option<Value>,
     delete: Option<Value>,
     move_to: Option<usize>,
 }
 
 impl ListOperationBuilder {
-    fn new(path: Path) -> ListOperationBuilder {
+    fn new() -> ListOperationBuilder {
         ListOperationBuilder {
-            path,
+            path_builder: Cell::new(PathBuilder::default()),
             insert: None,
             delete: None,
             move_to: None,
@@ -485,35 +482,44 @@ impl ListOperationBuilder {
     }
 
     pub fn build(self) -> Result<OperationComponent> {
+        let path = self.path_builder.take().build()?;
         if let Some(new_index) = self.move_to {
-            return OperationComponent::new(self.path, Operator::ListMove(new_index));
+            return OperationComponent::new(path, Operator::ListMove(new_index));
         }
 
         if let Some(del_val) = self.delete {
             if let Some(ins_val) = self.insert {
-                return OperationComponent::new(self.path, Operator::ListReplace(ins_val, del_val));
+                return OperationComponent::new(path, Operator::ListReplace(ins_val, del_val));
             }
-            return OperationComponent::new(self.path, Operator::ListDelete(del_val));
+            return OperationComponent::new(path, Operator::ListDelete(del_val));
         }
 
         if let Some(ins_val) = self.insert {
-            return OperationComponent::new(self.path, Operator::ListInsert(ins_val));
+            return OperationComponent::new(path, Operator::ListInsert(ins_val));
         }
 
-        OperationComponent::new(self.path, Operator::Noop())
+        OperationComponent::new(path, Operator::Noop())
+    }
+}
+
+impl AppendPath for ListOperationBuilder {
+    fn append_path_element(self, val: PathElement) -> Self {
+        self.path_builder
+            .set(self.path_builder.take().append_path_element(val));
+        self
     }
 }
 
 pub struct ObjectOperationBuilder {
-    path: Path,
+    path_builder: Cell<PathBuilder>,
     insert: Option<Value>,
     delete: Option<Value>,
 }
 
 impl ObjectOperationBuilder {
-    fn new(path: Path) -> ObjectOperationBuilder {
+    fn new() -> ObjectOperationBuilder {
         ObjectOperationBuilder {
-            path,
+            path_builder: Cell::new(PathBuilder::default()),
             insert: None,
             delete: None,
         }
@@ -536,38 +542,42 @@ impl ObjectOperationBuilder {
     }
 
     pub fn build(self) -> Result<OperationComponent> {
+        let path = self.path_builder.take().build()?;
+
         if let Some(del_val) = self.delete {
             if let Some(ins_val) = self.insert {
-                return OperationComponent::new(
-                    self.path,
-                    Operator::ObjectReplace(ins_val, del_val),
-                );
+                return OperationComponent::new(path, Operator::ObjectReplace(ins_val, del_val));
             }
-            return OperationComponent::new(self.path, Operator::ObjectDelete(del_val));
+            return OperationComponent::new(path, Operator::ObjectDelete(del_val));
         }
 
         if let Some(ins_val) = self.insert {
-            return OperationComponent::new(self.path, Operator::ObjectInsert(ins_val));
+            return OperationComponent::new(path, Operator::ObjectInsert(ins_val));
         }
 
-        OperationComponent::new(self.path, Operator::Noop())
+        OperationComponent::new(path, Operator::Noop())
+    }
+}
+
+impl AppendPath for ObjectOperationBuilder {
+    fn append_path_element(self, val: PathElement) -> Self {
+        self.path_builder
+            .set(self.path_builder.take().append_path_element(val));
+        self
     }
 }
 
 pub struct NumberAddOperationBuilder {
-    path: Path,
+    path_builder: Cell<PathBuilder>,
     number_i64: Option<i64>,
     number_f64: Option<f64>,
     sub_type_function: Box<dyn SubTypeFunctions>,
 }
 
 impl NumberAddOperationBuilder {
-    pub fn new(
-        path: Path,
-        sub_type_function: Box<dyn SubTypeFunctions>,
-    ) -> NumberAddOperationBuilder {
+    pub fn new(sub_type_function: Box<dyn SubTypeFunctions>) -> NumberAddOperationBuilder {
         NumberAddOperationBuilder {
-            path,
+            path_builder: Cell::new(PathBuilder::default()),
             number_i64: None,
             number_f64: None,
             sub_type_function,
@@ -585,6 +595,7 @@ impl NumberAddOperationBuilder {
     }
 
     pub fn build(self) -> Result<OperationComponent> {
+        let path = self.path_builder.take().build()?;
         // support insert/delete multipul numbers
         if self.number_f64.is_some() && self.number_i64.is_some() {
             return Err(JsonError::InvalidOperation(
@@ -595,13 +606,13 @@ impl NumberAddOperationBuilder {
         if let Some(v) = self.number_i64 {
             let o = serde_json::to_value(v).unwrap();
             OperationComponent::new(
-                self.path,
+                path,
                 Operator::SubType(SubType::NumberAdd, o, self.sub_type_function),
             )
         } else if let Some(v) = self.number_f64 {
             let o = serde_json::to_value(v).unwrap();
             OperationComponent::new(
-                self.path,
+                path,
                 Operator::SubType(SubType::NumberAdd, o, self.sub_type_function),
             )
         } else {
@@ -610,8 +621,16 @@ impl NumberAddOperationBuilder {
     }
 }
 
+impl AppendPath for NumberAddOperationBuilder {
+    fn append_path_element(self, val: PathElement) -> Self {
+        self.path_builder
+            .set(self.path_builder.take().append_path_element(val));
+        self
+    }
+}
+
 pub struct TextOperationBuilder {
-    path: Path,
+    path_builder: Cell<PathBuilder>,
     offset: usize,
     insert_val: Option<String>,
     delete_val: Option<String>,
@@ -619,9 +638,9 @@ pub struct TextOperationBuilder {
 }
 
 impl TextOperationBuilder {
-    pub fn new(path: Path, sub_type_function: Box<dyn SubTypeFunctions>) -> TextOperationBuilder {
+    pub fn new(sub_type_function: Box<dyn SubTypeFunctions>) -> TextOperationBuilder {
         TextOperationBuilder {
-            path,
+            path_builder: Cell::new(PathBuilder::default()),
             offset: 0,
             insert_val: None,
             delete_val: None,
@@ -654,6 +673,7 @@ impl TextOperationBuilder {
     }
 
     pub fn build(self) -> Result<OperationComponent> {
+        let path = self.path_builder.take().build()?;
         // support insert/delete multipul strings
         if self.insert_val.is_none() && self.delete_val.is_none()
             || (self.insert_val.is_some() && self.delete_val.is_some())
@@ -673,14 +693,21 @@ impl TextOperationBuilder {
 
         let o = Value::Object(op_map);
         OperationComponent::new(
-            self.path,
+            path,
             Operator::SubType(SubType::Text, o, self.sub_type_function),
         )
     }
 }
 
+impl AppendPath for TextOperationBuilder {
+    fn append_path_element(self, val: PathElement) -> Self {
+        self.path_builder
+            .set(self.path_builder.take().append_path_element(val));
+        self
+    }
+}
 pub struct SubTypeOperationBuilder {
-    path: Path,
+    path_builder: Cell<PathBuilder>,
     sub_type: SubType,
     sub_type_operator: Option<Value>,
     sub_type_function: Option<Box<dyn SubTypeFunctions>>,
@@ -688,12 +715,11 @@ pub struct SubTypeOperationBuilder {
 
 impl SubTypeOperationBuilder {
     fn new(
-        path: Path,
         sub_type: SubType,
         sub_type_function: Option<Box<dyn SubTypeFunctions>>,
     ) -> SubTypeOperationBuilder {
         SubTypeOperationBuilder {
-            path,
+            path_builder: Cell::new(PathBuilder::default()),
             sub_type,
             sub_type_operator: None,
             sub_type_function,
@@ -711,9 +737,10 @@ impl SubTypeOperationBuilder {
     }
 
     pub fn build(self) -> Result<OperationComponent> {
+        let path = self.path_builder.take().build()?;
         if let Some(o) = self.sub_type_operator {
             if let Some(f) = self.sub_type_function {
-                OperationComponent::new(self.path, Operator::SubType(self.sub_type, o, f))
+                OperationComponent::new(path, Operator::SubType(self.sub_type, o, f))
             } else {
                 Err(JsonError::InvalidOperation(
                     "sub type functions is required".into(),
@@ -727,6 +754,13 @@ impl SubTypeOperationBuilder {
     }
 }
 
+impl AppendPath for SubTypeOperationBuilder {
+    fn append_path_element(self, val: PathElement) -> Self {
+        self.path_builder
+            .set(self.path_builder.take().append_path_element(val));
+        self
+    }
+}
 pub struct OperationFactory {
     sub_type_holder: Rc<SubTypeFunctionsHolder>,
 }
@@ -753,43 +787,39 @@ impl OperationFactory {
         Operation::new(operations)
     }
 
-    pub fn list_operation_builder(&self, path: Path) -> ListOperationBuilder {
-        ListOperationBuilder::new(path)
+    pub fn list_operation_builder(&self) -> ListOperationBuilder {
+        ListOperationBuilder::new()
     }
 
-    pub fn object_operation_builder(&self, path: Path) -> ObjectOperationBuilder {
-        ObjectOperationBuilder::new(path)
+    pub fn object_operation_builder(&self) -> ObjectOperationBuilder {
+        ObjectOperationBuilder::new()
     }
 
-    pub fn number_add_operation_builder(&self, path: Path) -> NumberAddOperationBuilder {
+    pub fn number_add_operation_builder(&self) -> NumberAddOperationBuilder {
         let f = self
             .sub_type_holder
             .get(&SubType::NumberAdd)
             .map(|f| f.value().clone())
             .unwrap();
-        NumberAddOperationBuilder::new(path, f)
+        NumberAddOperationBuilder::new(f)
     }
 
-    pub fn text_operation_builder(&self, path: Path) -> TextOperationBuilder {
+    pub fn text_operation_builder(&self) -> TextOperationBuilder {
         let f = self
             .sub_type_holder
             .get(&SubType::Text)
             .map(|f| f.value().clone())
             .unwrap();
-        TextOperationBuilder::new(path, f)
+        TextOperationBuilder::new(f)
     }
 
-    pub fn sub_type_operation_builder(
-        &self,
-        path: Path,
-        sub_type_name: String,
-    ) -> SubTypeOperationBuilder {
+    pub fn sub_type_operation_builder(&self, sub_type_name: String) -> SubTypeOperationBuilder {
         let sub_type = SubType::Custome(sub_type_name);
         let f = self
             .sub_type_holder
             .get(&sub_type)
             .map(|f| f.value().clone());
-        SubTypeOperationBuilder::new(path, sub_type, f)
+        SubTypeOperationBuilder::new(sub_type, f)
     }
 
     fn operation_component_from_value(&self, value: Value) -> Result<OperationComponent> {
@@ -907,10 +937,11 @@ mod tests {
 
     #[test]
     fn test_number_add_operator() {
-        let path: Path = r#"["p1","p2"]"#.try_into().unwrap();
         let op_factory = OperationFactory::new(Rc::new(SubTypeFunctionsHolder::new()));
         let op = op_factory
-            .number_add_operation_builder(path)
+            .number_add_operation_builder()
+            .append_key_path("p1")
+            .append_key_path("p2")
             .add_int(100)
             .build()
             .unwrap();
@@ -925,17 +956,18 @@ mod tests {
     #[test]
     fn test_text_operator() {
         let sub_type_operand: Value = serde_json::from_str(r#"{"p":1, "i":"hello"}"#).unwrap();
-        let path: Path = r#"["p1","p2"]"#.try_into().unwrap();
         let op_factory = OperationFactory::new(Rc::new(SubTypeFunctionsHolder::new()));
         let op = op_factory
-            .text_operation_builder(path)
+            .text_operation_builder()
+            .append_key_path("p1")
+            .append_key_path("p2")
             .insert_str(1, "hello")
             .build()
             .unwrap();
 
         let Operator::SubType(sub_type, op_value, _) = op.operator else {
-                panic!()
-            };
+            panic!()
+        };
         assert_eq!(SubType::Text, sub_type);
         assert_eq!(sub_type_operand, op_value);
     }

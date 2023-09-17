@@ -54,7 +54,7 @@ impl Transformer {
         base_operation: &Operation,
     ) -> Result<(Operation, Operation)> {
         if base_operation.is_empty() {
-            return Ok((operation.clone(), Operation::empty_operation()));
+            return Ok((operation.clone(), Operation::default()));
         }
 
         operation.validates()?;

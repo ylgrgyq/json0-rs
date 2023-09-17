@@ -90,3 +90,33 @@ impl Default for Json0 {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::path::{AppendPath, PathBuilder};
+
+    use super::*;
+    use serde_json::Map;
+    use test_log::test;
+
+    #[test]
+    fn test_apply_object_operation() {
+        let json0 = Json0::new();
+
+        let mut json_to_operate = Value::Object(Map::new());
+
+        let op = json0
+            .operation_factory()
+            .object_operation_builder()
+            .append_key_path("key")
+            .insert(Value::String("world".into()))
+            .build()
+            .unwrap()
+            .into();
+
+        json0.apply(&mut json_to_operate, vec![op]).unwrap();
+
+        let expect_value: Value = serde_json::from_str("{\"key\":\"world\"}").unwrap();
+        assert_eq!(expect_value, json_to_operate);
+    }
+}
