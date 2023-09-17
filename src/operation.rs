@@ -212,7 +212,17 @@ impl OperationComponent {
     pub fn merge(&mut self, op: OperationComponent) -> Option<OperationComponent> {
         if let Some(new_operator) = match &self.operator {
             Operator::Noop() => Some(op.operator.clone()),
-            Operator::SubType(_, base_v, f) => f.merge(base_v, &op.operator),
+            Operator::SubType(t, base_v, f) => {
+                let mut ret = None;
+                if let Operator::SubType(other_t, other_v, _) = &op.operator {
+                    if t.eq(other_t) {
+                        if let Some(next_v) = f.merge(base_v, other_v) {
+                            ret = Some(Operator::SubType(t.clone(), next_v, f.clone()))
+                        }
+                    }
+                }
+                ret
+            }
 
             Operator::ListInsert(v1) => match &op.operator {
                 Operator::ListDelete(v2) => {

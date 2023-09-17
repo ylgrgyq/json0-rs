@@ -8,7 +8,6 @@ use serde_json::{Map, Value};
 
 use crate::error::{JsonError, Result};
 use crate::json::{ApplyOperationError, ApplyResult};
-use crate::operation::Operator;
 use crate::path::Path;
 use crate::transformer::TransformSide;
 
@@ -20,7 +19,7 @@ pub trait SubTypeFunctions {
 
     fn invert(&self, path: &Path, sub_type_operand: &Value) -> Result<Value>;
 
-    fn merge(&self, base_operand: &Value, other: &Operator) -> Option<Operator>;
+    fn merge(&self, base_operand: &Value, other_operand: &Value) -> Option<Value>;
 
     fn transform(&self, new: &Value, base: &Value, side: TransformSide) -> Result<Vec<Value>>;
 
@@ -150,28 +149,15 @@ impl SubTypeFunctions for NumberAddSubType {
         }
     }
 
-    fn merge(&self, base_operand: &Value, other: &Operator) -> Option<Operator> {
-        match &other {
-            Operator::SubType(_, other_v, _) => {
-                if base_operand.is_i64() && other_v.is_i64() {
-                    let new_v = base_operand.as_i64().unwrap() + other_v.as_i64().unwrap();
-                    Some(Operator::SubType(
-                        SubType::NumberAdd,
-                        serde_json::to_value(new_v).unwrap(),
-                        self.box_clone(),
-                    ))
-                } else if base_operand.is_f64() || other_v.is_f64() {
-                    let new_v = base_operand.as_f64().unwrap() + other_v.as_f64().unwrap();
-                    Some(Operator::SubType(
-                        SubType::NumberAdd,
-                        serde_json::to_value(new_v).unwrap(),
-                        self.box_clone(),
-                    ))
-                } else {
-                    None
-                }
-            }
-            _ => None,
+    fn merge(&self, base_operand: &Value, other_operand: &Value) -> Option<Value> {
+        if base_operand.is_i64() && other_operand.is_i64() {
+            let new_v = base_operand.as_i64().unwrap() + other_operand.as_i64().unwrap();
+            Some(serde_json::to_value(new_v).unwrap())
+        } else if base_operand.is_f64() || other_operand.is_f64() {
+            let new_v = base_operand.as_f64().unwrap() + other_operand.as_f64().unwrap();
+            Some(serde_json::to_value(new_v).unwrap())
+        } else {
+            None
         }
     }
 
@@ -387,49 +373,37 @@ impl SubTypeFunctions for TextSubType {
         Ok(self.invert_object(&s)?.to_value())
     }
 
-    fn merge(&self, base: &Value, other: &Operator) -> Option<Operator> {
-        if let Operator::SubType(sub_type, sub_type_operand, _) = other {
-            if SubType::Text.eq(sub_type) {
-                let base_op: TextOperand = base.try_into().ok()?;
-                let other_op: TextOperand = sub_type_operand.try_into().ok()?;
+    fn merge(&self, base: &Value, other_operand: &Value) -> Option<Value> {
+        let base_op: TextOperand = base.try_into().ok()?;
+        let other_op: TextOperand = other_operand.try_into().ok()?;
 
-                if base_op.is_insert()
-                    && other_op.is_insert()
-                    && base_op <= other_op
-                    && other_op.offset <= base_op.offset + base_op.uncheck_get_insert().len()
-                {
-                    let s = format!(
-                        "{}{}{}",
-                        &base_op.uncheck_get_insert()[0..other_op.offset - base_op.offset],
-                        &other_op.uncheck_get_insert(),
-                        &base_op.uncheck_get_insert()[other_op.offset - base_op.offset..],
-                    );
+        if base_op.is_insert()
+            && other_op.is_insert()
+            && base_op <= other_op
+            && other_op.offset <= base_op.offset + base_op.uncheck_get_insert().len()
+        {
+            let s = format!(
+                "{}{}{}",
+                &base_op.uncheck_get_insert()[0..other_op.offset - base_op.offset],
+                &other_op.uncheck_get_insert(),
+                &base_op.uncheck_get_insert()[other_op.offset - base_op.offset..],
+            );
 
-                    return Some(Operator::SubType(
-                        SubType::Text,
-                        TextOperand::new_insert(base_op.offset, s).to_value(),
-                        self.box_clone(),
-                    ));
-                }
-                if base_op.is_delete()
-                    && other_op.is_delete()
-                    && other_op <= base_op
-                    && base_op.offset <= other_op.offset + other_op.uncheck_get_delete().len()
-                {
-                    let s = format!(
-                        "{}{}{}",
-                        &other_op.uncheck_get_delete()[0..base_op.offset - other_op.offset],
-                        &base_op.uncheck_get_delete(),
-                        &other_op.uncheck_get_delete()[base_op.offset - other_op.offset..],
-                    );
+            return Some(TextOperand::new_insert(base_op.offset, s).to_value());
+        }
+        if base_op.is_delete()
+            && other_op.is_delete()
+            && other_op <= base_op
+            && base_op.offset <= other_op.offset + other_op.uncheck_get_delete().len()
+        {
+            let s = format!(
+                "{}{}{}",
+                &other_op.uncheck_get_delete()[0..base_op.offset - other_op.offset],
+                &base_op.uncheck_get_delete(),
+                &other_op.uncheck_get_delete()[base_op.offset - other_op.offset..],
+            );
 
-                    return Some(Operator::SubType(
-                        SubType::Text,
-                        TextOperand::new_delete(other_op.offset, s).to_value(),
-                        self.box_clone(),
-                    ));
-                }
-            }
+            return Some(TextOperand::new_delete(other_op.offset, s).to_value());
         }
 
         None

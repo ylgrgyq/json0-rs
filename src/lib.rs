@@ -93,7 +93,7 @@ impl Default for Json0 {
 
 #[cfg(test)]
 mod tests {
-    use crate::path::{AppendPath, PathBuilder};
+    use crate::path::AppendPath;
 
     use super::*;
     use serde_json::Map;
