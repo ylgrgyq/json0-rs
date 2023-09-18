@@ -41,3 +41,7 @@ json0.apply(&mut json_to_operate, vec![op]).unwrap();
 ```
 
 For more information on how to use `json0-rs`, see the [documentation](https://docs.rs/json0-rs).
+
+## License
+
+`json0-rs` is licensed under the MIT license. See the [LICENSE](https://github.com/ylgrgyq/json0-rs/blob/master/LICENSE.md) file for more information.
