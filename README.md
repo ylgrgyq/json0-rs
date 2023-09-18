@@ -1,7 +1,7 @@
 # json0-rs
 
 <p align=center>
-    <a href="https://github.com/ylgrgyq/json0-rs/blob/master/LICENSE"><img src="https://img.shields.io/github/license/ylgrgyq/json0-rs?style=flat-square" alt="MIT License"></a>
+    <a href="https://github.com/ylgrgyq/json0-rs/blob/master/LICENSE.md"><img src="https://img.shields.io/github/license/ylgrgyq/json0-rs?style=flat-square" alt="MIT License"></a>
 </p>
 
 
