@@ -1,5 +1,10 @@
 # json0-rs
 
+<p align=center>
+    <a href="https://github.com/ylgrgyq/json0-rs/blob/master/LICENSE"><img src="https://img.shields.io/github/license/ylgrgyq/json0-rs?style=flat-square" alt="MIT License"></a>
+</p>
+
+
 ## Usage
 
 To use `json0-rs`, simply add it to your project's dependencies in `Cargo.toml`:
