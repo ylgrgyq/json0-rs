@@ -41,15 +41,22 @@ impl Json0 {
         }
     }
 
-    pub fn register_subtype(
+    pub fn register_subtype<S, T>(
         &self,
-        sub_type: String,
-        o: Arc<dyn SubTypeFunctions>,
-    ) -> Result<Option<Arc<dyn SubTypeFunctions>>> {
+        sub_type: S,
+        o: T,
+    ) -> Result<Option<Arc<dyn SubTypeFunctions>>>
+    where
+        S: AsRef<str>,
+        T: SubTypeFunctions + 'static,
+    {
         self.functions.register_subtype(sub_type, o)
     }
 
-    pub fn unregister_subtype(&self, sub_type: &String) -> Option<Arc<dyn SubTypeFunctions>> {
+    pub fn unregister_subtype<S: AsRef<str>>(
+        &self,
+        sub_type: S,
+    ) -> Option<Arc<dyn SubTypeFunctions>> {
         self.functions.unregister_subtype(sub_type)
     }
 

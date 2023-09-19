@@ -80,25 +80,38 @@ impl SubTypeFunctionsHolder {
         SubTypeFunctionsHolder { subtype_operators }
     }
 
-    pub fn register_subtype(
+    pub fn register_subtype<S, T>(
         &self,
-        sub_type: String,
-        o: Arc<dyn SubTypeFunctions>,
-    ) -> Result<Option<Arc<dyn SubTypeFunctions>>> {
-        if sub_type.eq(NUMBER_ADD_SUB_TYPE_NAME) || sub_type.eq(TEXT_SUB_TYPE_NAME) {
-            return Err(JsonError::ConflictSubType(sub_type));
+        sub_type: S,
+        o: T,
+    ) -> Result<Option<Arc<dyn SubTypeFunctions>>>
+    where
+        S: AsRef<str>,
+        T: SubTypeFunctions + 'static,
+    {
+        if sub_type.as_ref().eq(NUMBER_ADD_SUB_TYPE_NAME)
+            || sub_type.as_ref().eq(TEXT_SUB_TYPE_NAME)
+        {
+            return Err(JsonError::ConflictSubType(sub_type.as_ref().into()));
         }
 
-        Ok(self.subtype_operators.insert(SubType::Custome(sub_type), o))
+        Ok(self
+            .subtype_operators
+            .insert(SubType::Custome(sub_type.as_ref().into()), Arc::new(o)))
     }
 
-    pub fn unregister_subtype(&self, sub_type: &String) -> Option<Arc<dyn SubTypeFunctions>> {
-        if sub_type.eq(NUMBER_ADD_SUB_TYPE_NAME) || sub_type.eq(TEXT_SUB_TYPE_NAME) {
+    pub fn unregister_subtype<S: AsRef<str>>(
+        &self,
+        sub_type: S,
+    ) -> Option<Arc<dyn SubTypeFunctions>> {
+        if sub_type.as_ref().eq(NUMBER_ADD_SUB_TYPE_NAME)
+            || sub_type.as_ref().eq(TEXT_SUB_TYPE_NAME)
+        {
             return None;
         }
 
         self.subtype_operators
-            .remove(&SubType::Custome(sub_type.clone()))
+            .remove(&SubType::Custome(sub_type.as_ref().into()))
             .map(|s| s.1)
     }
 
